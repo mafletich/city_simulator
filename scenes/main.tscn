@@ -85,6 +85,12 @@ size_flags_vertical = 4
 theme_override_font_sizes/font_size = 18
 text = "  Настройки весов  "
 
+[node name="LogsButton" type="Button" parent="VBox/TopBarPanel/TopBarMargin/TopBar"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 18
+text = "  Открыть журналы  "
+
 [node name="ContentArea" type="HBoxContainer" parent="VBox"]
 layout_mode = 2
 size_flags_vertical = 3

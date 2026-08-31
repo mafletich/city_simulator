@@ -3,6 +3,7 @@ extends Control
 @onready var time_label: Label = $VBox/TopBarPanel/TopBarMargin/TopBar/TimeLabel
 @onready var next_tick_button: Button = $VBox/TopBarPanel/TopBarMargin/TopBar/NextTickButton
 @onready var weights_button: Button = $VBox/TopBarPanel/TopBarMargin/TopBar/WeightsButton
+@onready var logs_button: Button = $VBox/TopBarPanel/TopBarMargin/TopBar/LogsButton
 @onready var weights_panel: PanelContainer = $WeightsPanel
 
 @onready var buildings_list: ItemList = $VBox/ContentArea/BuildingsPanel/BuildingsMargin/BuildingsVBox/BuildingsList
@@ -43,11 +44,16 @@ var characters_in_selected_building: Array[CharacterData] = []
 func _ready() -> void:
 	next_tick_button.pressed.connect(_on_next_tick_pressed)
 	weights_button.pressed.connect(_on_weights_button_pressed)
+	logs_button.pressed.connect(_on_logs_button_pressed)
 	buildings_list.item_selected.connect(_on_building_selected)
 	characters_list.item_selected.connect(_on_character_selected)
 
 	_refresh_buildings_list()
 	_update_time_label()
+	print("Журналы персонажей: ", EventLogger.get_log_dir_absolute())
+
+func _on_logs_button_pressed() -> void:
+	OS.shell_open(EventLogger.get_log_dir_absolute())
 
 func _on_next_tick_pressed() -> void:
 	World.advance_tick()
@@ -117,7 +123,7 @@ func _refresh_selected_character_details() -> void:
 	# на экране (последнее известное состояние), просто больше не обновляется.
 
 func _action_summary(c: CharacterData) -> String:
-	var text := _action_text(c.current_action)
+	var text := Enums.action_text(c.current_action)
 	if c.current_activity_detail != "":
 		text += " (%s)" % c.current_activity_detail
 	return text
@@ -131,13 +137,13 @@ func _show_character_details(c: CharacterData) -> void:
 
 	name_label.text = c.full_name()
 	subtitle_label.text = "%s · %d лет · %s" % [
-		_profession_text(c.profession), c.age,
+		Enums.profession_text(c.profession), c.age,
 		"мужчина" if c.gender == Enums.Gender.MALE else "женщина",
 	]
 
 	gender_value.text = "М" if c.gender == Enums.Gender.MALE else "Ж"
 	age_value.text = str(c.age)
-	profession_value.text = _profession_text(c.profession)
+	profession_value.text = Enums.profession_text(c.profession)
 	home_value.text = home_building.building_name if home_building != null else "—"
 	work_value.text = work_building.building_name if work_building != null else "—"
 	work_hours_value.text = _work_hours_text(c)
@@ -168,51 +174,3 @@ func _schedule_text(c: CharacterData) -> String:
 	if c.schedule_type == Enums.ScheduleType.FIVE_TWO:
 		return "5/2 (выходные Сб/Вс)"
 	return "2/2 (плавающие выходные)"
-
-func _action_text(action: Enums.ActionType) -> String:
-	match action:
-		Enums.ActionType.SLEEP:
-			return "Спит"
-		Enums.ActionType.WORK:
-			return "Работает"
-		Enums.ActionType.EAT:
-			return "Ест"
-		Enums.ActionType.SOCIALIZE:
-			return "Общается"
-		Enums.ActionType.REST:
-			return "Отдыхает"
-		Enums.ActionType.WANDER:
-			return "Гуляет"
-		Enums.ActionType.SHOP:
-			return "За покупками"
-	return "?"
-
-func _profession_text(p: Enums.Profession) -> String:
-	match p:
-		Enums.Profession.UNEMPLOYED:
-			return "Безработный"
-		Enums.Profession.OFFICE_WORKER:
-			return "Офисный работник"
-		Enums.Profession.OFFICE_DIRECTOR:
-			return "Директор"
-		Enums.Profession.DOCTOR:
-			return "Врач"
-		Enums.Profession.CHIEF_DOCTOR:
-			return "Главный врач"
-		Enums.Profession.BARTENDER:
-			return "Бармен"
-		Enums.Profession.BAR_MANAGER:
-			return "Администратор"
-		Enums.Profession.SHOPKEEPER:
-			return "Продавец"
-		Enums.Profession.SHOP_MANAGER:
-			return "Управляющий магазином"
-		Enums.Profession.COOK:
-			return "Повар"
-		Enums.Profession.WAITER:
-			return "Официант"
-		Enums.Profession.CAFE_MANAGER:
-			return "Менеджер кафе"
-		Enums.Profession.GARDENER:
-			return "Садовник"
-	return "?"

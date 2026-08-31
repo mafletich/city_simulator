@@ -35,13 +35,31 @@ extends Resource
 
 ## --- Базовые веса конкурирующих желаний (вне рабочего/спального окна) ---
 @export var eat_weight: float = 0.9
+## Ниже этого голода "поесть" не рассматривается вообще — иначе оно никогда
+## не обнуляется (голод чуть растёт каждый цикл) и время от времени побеждает
+## другие желания просто потому, что их счёт при насыщении падает до 0.
+@export var eat_min_hunger_threshold: float = 15.0
 @export var socialize_weight: float = 0.8
 @export var rest_weight: float = 0.5
 @export var wander_weight: float = 0.4
 @export var shop_weight: float = 0.4
 ## Шанс, что персонаж, решивший "отдохнуть", пойдёт в парк, а не останется дома.
 @export var park_rest_chance: float = 0.5
-@export var inertia_bonus: float = 8.0
+
+## --- Инерция: нежелание бросать текущее занятие, затухающее со временем ---
+## "Заниматься тем же самым" — именно типом действия (отдыхать/гулять/...).
+@export var activity_stay_start_chance: float = 0.8
+@export var activity_stay_min_chance: float = 0.15
+@export var activity_stay_decay: float = 0.75
+## "Остаться на том же месте" — проверяется только если решил заниматься тем
+## же самым; иначе одно "не хочу бросать дело" внезапно означало бы ещё и
+## "не хочу вставать с места", что не всегда логично связано.
+@export var location_stay_start_chance: float = 0.9
+@export var location_stay_min_chance: float = 0.2
+@export var location_stay_decay: float = 0.8
+## Если голод персонажа выше этого порога, инерция вообще не применяется —
+## явное "хочу есть" всегда может пробить привычку сидеть в парке.
+@export var inertia_hunger_override: float = 65.0
 
 ## --- Профессиональное поведение ---
 ## Общий шанс обслужить клиента "1 в 1" — и у барменов (готовит коктейль
@@ -63,11 +81,18 @@ static func get_definitions() -> Array[Dictionary]:
 		{"label": "Порог голода для обеда на работе", "property": "work_lunch_hunger_threshold", "min": 20.0, "max": 90.0, "step": 5.0},
 		{"label": "Снижение голода обедом на работе", "property": "work_lunch_relief", "min": 5.0, "max": 40.0, "step": 1.0},
 		{"label": "Вес желания поесть", "property": "eat_weight", "min": 0.1, "max": 2.0, "step": 0.05},
+		{"label": "Мин. голод, чтобы рассматривать еду", "property": "eat_min_hunger_threshold", "min": 0.0, "max": 50.0, "step": 5.0},
 		{"label": "Вес желания общаться", "property": "socialize_weight", "min": 0.1, "max": 2.0, "step": 0.05},
 		{"label": "Вес желания отдыхать", "property": "rest_weight", "min": 0.1, "max": 2.0, "step": 0.05},
 		{"label": "Вес желания гулять", "property": "wander_weight", "min": 0.1, "max": 2.0, "step": 0.05},
 		{"label": "Вес желания сходить в магазин", "property": "shop_weight", "min": 0.1, "max": 2.0, "step": 0.05},
 		{"label": "Шанс пойти отдыхать в парк (не домой)", "property": "park_rest_chance", "min": 0.0, "max": 1.0, "step": 0.05},
-		{"label": "Инерция текущего действия", "property": "inertia_bonus", "min": 0.0, "max": 50.0, "step": 1.0},
+		{"label": "Инерция: шанс остаться при том же занятии (1-й цикл)", "property": "activity_stay_start_chance", "min": 0.0, "max": 1.0, "step": 0.05},
+		{"label": "Инерция: минимальный шанс остаться при занятии", "property": "activity_stay_min_chance", "min": 0.0, "max": 1.0, "step": 0.05},
+		{"label": "Инерция: скорость затухания (занятие)", "property": "activity_stay_decay", "min": 0.1, "max": 0.99, "step": 0.05},
+		{"label": "Инерция: шанс остаться на месте (1-й цикл)", "property": "location_stay_start_chance", "min": 0.0, "max": 1.0, "step": 0.05},
+		{"label": "Инерция: минимальный шанс остаться на месте", "property": "location_stay_min_chance", "min": 0.0, "max": 1.0, "step": 0.05},
+		{"label": "Инерция: скорость затухания (место)", "property": "location_stay_decay", "min": 0.1, "max": 0.99, "step": 0.05},
+		{"label": "Голод, пробивающий инерцию", "property": "inertia_hunger_override", "min": 20.0, "max": 100.0, "step": 5.0},
 		{"label": "Шанс обслужить клиента (бар/кафе)", "property": "staff_serve_chance", "min": 0.0, "max": 1.0, "step": 0.05},
 	]

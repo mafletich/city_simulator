@@ -15,6 +15,25 @@ func decide_action(c: CharacterData, world) -> Dictionary:
 		return _fixed_action(Enums.ActionType.SLEEP, c.home_building_id, c.home_room_id)
 
 	var w: DecisionWeights = world.weights
+
+	# Инерция: "неохота бросать то, чем уже занят" — но не тогда, когда
+	# персонаж работает/спит (это уже отсечено выше) или реально хочет есть
+	# (голод не должен блокироваться привычкой сидеть в парке).
+	if _should_apply_inertia(c, w):
+		var stay_activity_chance := _decaying_chance(
+			c.activity_streak, w.activity_stay_start_chance, w.activity_stay_min_chance, w.activity_stay_decay
+		)
+		if randf() < stay_activity_chance:
+			var stay_location_chance := _decaying_chance(
+				c.location_streak, w.location_stay_start_chance, w.location_stay_min_chance, w.location_stay_decay
+			)
+			if randf() < stay_location_chance:
+				# Самый сильный вариант инерции: буквально ничего не меняет.
+				return _fixed_action(c.current_action, c.current_building_id, c.current_room_id)
+			# Готов заниматься тем же самым, но не обязательно здесь же —
+			# пересчитываем как обычно, просто для того же типа действия.
+			return _score_for_action(c.current_action, c, world, w)
+
 	var candidates: Array[Dictionary] = [
 		_score_eat(c, world, w),
 		_score_socialize(c, world, w),
@@ -22,23 +41,59 @@ func decide_action(c: CharacterData, world) -> Dictionary:
 		_score_wander(c, world, w),
 		_score_shop(c, world, w),
 	]
-
-	# Небольшой бонус к текущему действию, чтобы персонажи не "дёргались"
-	# между разными действиями каждый цикл без веской причины.
-	for candidate in candidates:
-		if candidate["action"] == c.current_action:
-			candidate["score"] += w.inertia_bonus
-
 	candidates.sort_custom(func(a, b): return a["score"] > b["score"])
 	return candidates[0]
 
 func _fixed_action(action: Enums.ActionType, building_id: int, room_id: int) -> Dictionary:
 	return {"action": action, "score": 9999.0, "building_id": building_id, "room_id": room_id}
 
+## Инерция применима только к "свободным" занятиям — не к работе/сну (те уже
+## решены выше жёстко) и не к самому приёму пищи (есть не "залипает" сам по
+## себе). Если голод уже выше порога — включаем обычную конкуренцию весов,
+## чтобы явное "хочу есть" могло пробить привычку сидеть в парке.
+func _should_apply_inertia(c: CharacterData, w: DecisionWeights) -> bool:
+	if c.current_action == Enums.ActionType.WORK or c.current_action == Enums.ActionType.SLEEP:
+		return false
+	if c.current_action == Enums.ActionType.EAT:
+		return false
+	if c.hunger >= w.inertia_hunger_override:
+		return false
+	return true
+
+## Вероятность "остаться" убывает с числом циклов подряд, которые персонаж
+## уже этим занят: экспоненциальное затухание от start к min с коэффициентом
+## decay за цикл. streak=1 (только что начал) -> ровно start; дальше плавно
+## снижается, но никогда не падает ниже min — иногда лень пересчитывать жизнь
+## заново даже после часа одного и того же занятия, и это реалистично.
+func _decaying_chance(streak: int, start: float, min_chance: float, decay: float) -> float:
+	if streak <= 0:
+		return start
+	return min_chance + (start - min_chance) * pow(decay, streak - 1)
+
+func _score_for_action(action: Enums.ActionType, c: CharacterData, world, w: DecisionWeights) -> Dictionary:
+	match action:
+		Enums.ActionType.EAT:
+			return _score_eat(c, world, w)
+		Enums.ActionType.SOCIALIZE:
+			return _score_socialize(c, world, w)
+		Enums.ActionType.REST:
+			return _score_rest(c, world, w)
+		Enums.ActionType.WANDER:
+			return _score_wander(c, world, w)
+		Enums.ActionType.SHOP:
+			return _score_shop(c, world, w)
+	return _score_rest(c, world, w) # не должно случаться, безопасный запасной вариант
+
 func _score_eat(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := c.hunger * w.eat_weight
 	if c.hunger > 70.0:
 		score += 25.0
+	if c.hunger < w.eat_min_hunger_threshold:
+		# Без этого EAT никогда не обнуляется до конца (голод чуть растёт
+		# каждый цикл), а другие желания при насыщении падают ровно до 0 —
+		# и крошечный положительный счёт "поесть" начинает побеждать чаще,
+		# чем должен, из-за чего персонаж будто перекусывает каждый цикл.
+		score -= 1000.0
 
 	var venue := _pick_open_building(world, [Enums.BuildingType.CAFE])
 	var building_id := c.home_building_id

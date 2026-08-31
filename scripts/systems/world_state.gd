@@ -51,16 +51,19 @@ var total_days_elapsed: int = 0
 
 var decision_system: DecisionSystem
 var weights: DecisionWeights
+var event_logger: EventLogger
 
 func _ready() -> void:
 	randomize()
 	decision_system = DecisionSystem.new()
 	weights = DecisionWeights.new()
+	event_logger = EventLogger.new()
 	generate_city()
 
 ## --- Генерация мира ---------------------------------------------------
 
 func generate_city() -> void:
+	event_logger.clear_logs()
 	buildings.clear()
 	characters.clear()
 	current_day = 0
@@ -245,6 +248,7 @@ func advance_tick() -> void:
 		_apply_decision(c, decision)
 
 	_resolve_work_activities()
+	event_logger.log_tick(characters, self)
 
 func _update_needs(c: CharacterData) -> void:
 	var energy_loss := weights.energy_decay_rate
@@ -260,6 +264,12 @@ func _apply_decision(c: CharacterData, decision: Dictionary) -> void:
 	var action: Enums.ActionType = decision["action"]
 	var target_building_id: int = decision["building_id"]
 	var target_room_id: int = decision["room_id"]
+
+	# Считаем "стрик" ДО того, как перезапишем текущее состояние — иначе
+	# сравнивать было бы уже не с чем. Стрик начинается с 1 в тот самый
+	# цикл, когда действие/место выбрано (см. DecisionSystem._decaying_chance).
+	c.activity_streak = (c.activity_streak + 1) if action == c.current_action else 1
+	c.location_streak = (c.location_streak + 1) if target_building_id == c.current_building_id else 1
 
 	if target_building_id != c.current_building_id or target_room_id != c.current_room_id:
 		_move_character(c, target_building_id, target_room_id)

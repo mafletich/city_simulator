@@ -45,5 +45,13 @@ var current_activity_detail: String = ""
 var current_building_id: int = -1
 var current_room_id: int = -1
 
+## Сколько циклов подряд персонаж уже занят current_action / находится в
+## current_building_id — используется системой принятия решений, чтобы
+## "инерция" (нежелание бросать текущее занятие) затухала со временем, а не
+## была одинаковой на 1-м и на 20-м цикле подряд. Считается с 1 (см.
+## World._apply_decision) в момент, когда действие только выбрано.
+var activity_streak: int = 0
+var location_streak: int = 0
+
 func full_name() -> String:
 	return "%s %s" % [first_name, last_name]
