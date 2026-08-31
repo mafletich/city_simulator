@@ -4,12 +4,10 @@ extends Node
 ## Хранит всех персонажей, все здания и игровое время; продвигает циклы.
 
 const MINUTES_PER_TICK: int = 10
-## Ежедневные (не будни-only) заведения теперь всегда укомплектованы ПАРАМИ
-## 2/2-сотрудников на позицию (см. BuildingSchedules), чтобы гарантированно
-## не оставаться без персонала по выходным — это примерно удваивает спрос
-## на рабочую силу у баров/клубов/магазина/больницы, так что жителей города
-## тоже пришлось увеличить, иначе вакансии просто некому было бы закрыть.
-const CHARACTER_COUNT: int = 40
+## Число жителей подобрано под ~10-20% безработицы при текущем наборе
+## зданий/должностей ниже — если поменяешь состав города, скорее всего
+## придётся подстроить и это число (см. отчёт о прогонах в PR/чате).
+const CHARACTER_COUNT: int = 50
 
 const DAY_NAMES: Array[String] = [
 	"Понедельник", "Вторник", "Среда", "Четверг",
@@ -19,11 +17,26 @@ const DAY_NAMES: Array[String] = [
 const REST_FLAVORS: Array[String] = [
 	"Смотрит телевизор", "Читает книгу", "Слушает музыку", "Просто отдыхает",
 ]
-const OFFICE_ACTIVITIES: Array[String] = [
+const OFFICE_WORKER_ACTIVITIES: Array[String] = [
 	"Пишет отчёт", "На совещании", "Отвечает на письма", "Звонит клиенту",
+]
+const OFFICE_DIRECTOR_ACTIVITIES: Array[String] = [
+	"Проводит совещание", "Подписывает документы", "На звонке с партнёрами", "Изучает отчёты",
 ]
 const DOCTOR_ACTIVITIES: Array[String] = [
 	"Ведёт приём", "Заполняет карты пациентов", "На обходе",
+]
+const CHIEF_DOCTOR_ACTIVITIES: Array[String] = [
+	"Проверяет работу отделения", "Совещание с персоналом", "Изучает отчёты",
+]
+const MANAGER_ACTIVITIES: Array[String] = [
+	"Проверяет отчёты", "Общается с поставщиками", "Следит за залом", "Работает с кассой",
+]
+const COOK_ACTIVITIES: Array[String] = [
+	"Готовит блюдо", "Моет посуду", "Проверяет запасы на кухне",
+]
+const GARDENER_ACTIVITIES: Array[String] = [
+	"Подстригает кусты", "Поливает клумбы", "Убирает территорию", "Сажает цветы",
 ]
 
 var characters: Array[CharacterData] = []
@@ -57,28 +70,43 @@ func generate_city() -> void:
 	var next_id := 0
 
 	var residential: Array[BuildingData] = []
-	for i in range(10):
+	for i in range(14):
 		var b := _create_building(next_id, "Жилой дом №%d" % (i + 1), Enums.BuildingType.RESIDENTIAL, 4)
 		next_id += 1
 		buildings.append(b)
 		residential.append(b)
 
-	var office1 := _create_building(next_id, "Офис №1", Enums.BuildingType.OFFICE, 6); next_id += 1
-	var office2 := _create_building(next_id, "Офис №2", Enums.BuildingType.OFFICE, 6); next_id += 1
-	var hospital := _create_building(next_id, "Больница", Enums.BuildingType.HOSPITAL, 5); next_id += 1
-	var bar := _create_building(next_id, "Бар \"Полночь\"", Enums.BuildingType.BAR, 10); next_id += 1
-	var club := _create_building(next_id, "Клуб \"Электро\"", Enums.BuildingType.CLUB, 15); next_id += 1
-	var shop := _create_building(next_id, "Магазин", Enums.BuildingType.SHOP, 8); next_id += 1
+	var workplace_specs: Array[Dictionary] = [
+		{"name": "Офис №1", "type": Enums.BuildingType.OFFICE, "size": 6},
+		{"name": "Офис №2", "type": Enums.BuildingType.OFFICE, "size": 6},
+		{"name": "Больница", "type": Enums.BuildingType.HOSPITAL, "size": 5},
+		{"name": "Бар \"Полночь\"", "type": Enums.BuildingType.BAR, "size": 10},
+		{"name": "Бар \"Закат\"", "type": Enums.BuildingType.BAR, "size": 8},
+		{"name": "Клуб \"Электро\"", "type": Enums.BuildingType.CLUB, "size": 15},
+		{"name": "Клуб \"Резонанс\"", "type": Enums.BuildingType.CLUB, "size": 12},
+		{"name": "Магазин №1", "type": Enums.BuildingType.SHOP, "size": 8},
+		{"name": "Магазин №2", "type": Enums.BuildingType.SHOP, "size": 6},
+		{"name": "Кафе \"Уют\"", "type": Enums.BuildingType.CAFE, "size": 8},
+		{"name": "Кафе \"Аромат\"", "type": Enums.BuildingType.CAFE, "size": 6},
+		{"name": "Парк \"Центральный\"", "type": Enums.BuildingType.PARK, "size": 30},
+		{"name": "Парк \"Речной\"", "type": Enums.BuildingType.PARK, "size": 20},
+	]
 
-	var workplaces: Array[BuildingData] = [office1, office2, hospital, bar, club, shop]
 	var all_vacancies: Array[Dictionary] = []
-	for wp in workplaces:
+	for spec in workplace_specs:
+		var wp := _create_building(next_id, spec["name"], spec["type"], spec["size"])
+		next_id += 1
+
 		var preset := BuildingSchedules.pick_random_preset(wp.building_type)
 		wp.open_hour = preset["open"]
 		wp.close_hour = preset["close"]
 		wp.schedule_label = preset["label"]
 		wp.is_weekday_only = BuildingSchedules.is_weekday_only(wp.building_type)
 		wp.workdays_label = "Пн–Пт" if wp.is_weekday_only else "Ежедневно"
+		wp.always_open_to_public = wp.building_type == Enums.BuildingType.PARK
+
+		var position_rules := BuildingSchedules.get_position_rules(wp.building_type)
+		wp.has_required_staffing = position_rules.any(func(r): return r["required"])
 
 		var vacancies := BuildingSchedules.generate_vacancies(wp)
 		wp.staff_count = vacancies.size()
@@ -143,7 +171,9 @@ func _create_random_character(id: int, residential: Array[BuildingData], vacancy
 		c.work_end_hour = -1
 	else:
 		var workplace: BuildingData = vacancy["building"]
-		c.profession = _profession_for_building_type(workplace.building_type)
+		# Должность идёт прямо из вакансии, не выводится из типа здания —
+		# у одного здания (например кафе) несколько разных должностей сразу.
+		c.profession = vacancy["position"]
 		c.work_building_id = workplace.id
 		c.work_room_id = 0
 		# Часы смены идут прямо из вакансии (см. BuildingSchedules) — так все
@@ -174,18 +204,6 @@ func _create_random_character(id: int, residential: Array[BuildingData], vacancy
 	c.home_room_id = apartment.id
 
 	return c
-
-func _profession_for_building_type(type: Enums.BuildingType) -> Enums.Profession:
-	match type:
-		Enums.BuildingType.OFFICE:
-			return Enums.Profession.OFFICE_WORKER
-		Enums.BuildingType.HOSPITAL:
-			return Enums.Profession.DOCTOR
-		Enums.BuildingType.BAR, Enums.BuildingType.CLUB:
-			return Enums.Profession.BARTENDER
-		Enums.BuildingType.SHOP:
-			return Enums.Profession.SHOPKEEPER
-	return Enums.Profession.UNEMPLOYED
 
 ## Часы сна считаются от времени пробуждения: работающие встают за час до
 ## смены и спят 8 часов назад от этого момента; безработные встают когда хотят.
@@ -250,7 +268,11 @@ func _apply_decision(c: CharacterData, decision: Dictionary) -> void:
 			c.energy = clamp(c.energy + weights.sleep_energy_regen, 0.0, 100.0)
 		Enums.ActionType.EAT:
 			c.current_activity_detail = ""
-			c.hunger = clamp(c.hunger - weights.eat_hunger_relief, 0.0, 100.0)
+			var target_building := get_building(target_building_id)
+			if target_building != null and target_building.building_type == Enums.BuildingType.CAFE:
+				c.hunger = clamp(c.hunger - weights.cafe_hunger_relief, 0.0, 100.0)
+			else:
+				c.hunger = clamp(c.hunger - weights.eat_hunger_relief, 0.0, 100.0)
 		Enums.ActionType.SOCIALIZE:
 			c.current_activity_detail = ""
 			c.social = clamp(c.social + weights.socialize_social_gain, 0.0, 100.0)
@@ -266,9 +288,14 @@ func _apply_decision(c: CharacterData, decision: Dictionary) -> void:
 		Enums.ActionType.WANDER:
 			c.current_activity_detail = ""
 			c.fun = clamp(c.fun + weights.wander_fun_gain, 0.0, 100.0)
+		Enums.ActionType.SHOP:
+			c.current_activity_detail = ""
+			c.fun = clamp(c.fun + weights.shop_fun_gain, 0.0, 100.0)
 
 ## Второй проход: конкретизируем, ЧЕМ именно занят каждый работающий персонаж,
 ## с учётом того, кто ещё есть в этом же здании (клиенты, другие работники).
+## Группируем по ДОЛЖНОСТИ, а не по типу здания — у одного здания (кафе)
+## бывает сразу несколько разных должностей одновременно.
 func _resolve_work_activities() -> void:
 	var workers_by_building: Dictionary = {}
 	for c in characters:
@@ -293,20 +320,41 @@ func _resolve_work_activities() -> void:
 			else:
 				workers.append(wk)
 
-		match building.building_type:
-			Enums.BuildingType.BAR, Enums.BuildingType.CLUB:
-				_resolve_bartender_activities(building, workers)
-			Enums.BuildingType.SHOP:
-				_resolve_shopkeeper_activities(building, workers)
-			Enums.BuildingType.HOSPITAL:
-				for doctor in workers:
-					doctor.current_activity_detail = DOCTOR_ACTIVITIES[randi() % DOCTOR_ACTIVITIES.size()]
-			Enums.BuildingType.OFFICE:
-				for worker in workers:
-					worker.current_activity_detail = OFFICE_ACTIVITIES[randi() % OFFICE_ACTIVITIES.size()]
-			_:
-				for w in workers:
-					w.current_activity_detail = "Работает"
+		var by_position: Dictionary = {}
+		for wk in workers:
+			if not by_position.has(wk.profession):
+				by_position[wk.profession] = []
+			by_position[wk.profession].append(wk)
+
+		for position in by_position.keys():
+			var pos_workers: Array = by_position[position]
+			match position:
+				Enums.Profession.BARTENDER:
+					_resolve_bartender_activities(building, pos_workers)
+				Enums.Profession.WAITER:
+					_resolve_waiter_activities(building, pos_workers)
+				Enums.Profession.SHOPKEEPER:
+					_resolve_shopkeeper_activities(building, pos_workers)
+				Enums.Profession.COOK:
+					_assign_flavor(pos_workers, COOK_ACTIVITIES)
+				Enums.Profession.OFFICE_WORKER:
+					_assign_flavor(pos_workers, OFFICE_WORKER_ACTIVITIES)
+				Enums.Profession.OFFICE_DIRECTOR:
+					_assign_flavor(pos_workers, OFFICE_DIRECTOR_ACTIVITIES)
+				Enums.Profession.DOCTOR:
+					_assign_flavor(pos_workers, DOCTOR_ACTIVITIES)
+				Enums.Profession.CHIEF_DOCTOR:
+					_assign_flavor(pos_workers, CHIEF_DOCTOR_ACTIVITIES)
+				Enums.Profession.BAR_MANAGER, Enums.Profession.SHOP_MANAGER, Enums.Profession.CAFE_MANAGER:
+					_assign_flavor(pos_workers, MANAGER_ACTIVITIES)
+				Enums.Profession.GARDENER:
+					_assign_flavor(pos_workers, GARDENER_ACTIVITIES)
+				_:
+					_assign_flavor(pos_workers, ["Работает"])
+
+func _assign_flavor(workers: Array, flavors: Array[String]) -> void:
+	for w in workers:
+		w.current_activity_detail = flavors[randi() % flavors.size()]
 
 func _get_clients_in_building(building_id: int, wanted_action: Enums.ActionType) -> Array:
 	var result: Array = []
@@ -315,8 +363,8 @@ func _get_clients_in_building(building_id: int, wanted_action: Enums.ActionType)
 			result.append(c)
 	return result
 
-## Клиентов, ищущих обслуживания, распределяем 1-в-1 между барменами этого
-## тика, чтобы двое барменов не "готовили коктейль" одному и тому же гостю.
+## Клиентов, ищущих обслуживания, распределяем 1-в-1 между сотрудниками этого
+## тика, чтобы двое барменов/официантов не обслуживали одного и того же гостя.
 func _resolve_bartender_activities(building: BuildingData, workers: Array) -> void:
 	var clients := _get_clients_in_building(building.id, Enums.ActionType.SOCIALIZE)
 	var served_client_ids: Array[int] = []
@@ -325,15 +373,30 @@ func _resolve_bartender_activities(building: BuildingData, workers: Array) -> vo
 		for cl in clients:
 			if not served_client_ids.has(cl.id):
 				available.append(cl)
-		if available.size() > 0 and randf() < weights.bartender_serve_chance:
+		if available.size() > 0 and randf() < weights.staff_serve_chance:
 			var client: CharacterData = available[randi() % available.size()]
 			served_client_ids.append(client.id)
 			bartender.current_activity_detail = "Готовит коктейль для %s" % client.first_name
 		else:
 			bartender.current_activity_detail = "Протирает барную стойку"
 
+func _resolve_waiter_activities(building: BuildingData, workers: Array) -> void:
+	var clients := _get_clients_in_building(building.id, Enums.ActionType.EAT)
+	var served_client_ids: Array[int] = []
+	for waiter in workers:
+		var available: Array = []
+		for cl in clients:
+			if not served_client_ids.has(cl.id):
+				available.append(cl)
+		if available.size() > 0 and randf() < weights.staff_serve_chance:
+			var client: CharacterData = available[randi() % available.size()]
+			served_client_ids.append(client.id)
+			waiter.current_activity_detail = "Обслуживает столик %s" % client.first_name
+		else:
+			waiter.current_activity_detail = "Убирает со стола"
+
 func _resolve_shopkeeper_activities(building: BuildingData, workers: Array) -> void:
-	var clients := _get_clients_in_building(building.id, Enums.ActionType.WANDER)
+	var clients := _get_clients_in_building(building.id, Enums.ActionType.SHOP)
 	for shopkeeper in workers:
 		if clients.size() > 0 and randf() < 0.8:
 			shopkeeper.current_activity_detail = "Обслуживает покупателя"
@@ -365,11 +428,12 @@ func get_building(id: int) -> BuildingData:
 			return b
 	return null
 
-func get_building_by_type(type: Enums.BuildingType) -> BuildingData:
+func get_buildings_by_type(type: Enums.BuildingType) -> Array[BuildingData]:
+	var result: Array[BuildingData] = []
 	for b in buildings:
 		if b.building_type == type:
-			return b
-	return null
+			result.append(b)
+	return result
 
 func get_characters_in_building(building_id: int) -> Array[CharacterData]:
 	var result: Array[CharacterData] = []

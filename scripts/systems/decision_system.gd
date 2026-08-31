@@ -4,8 +4,8 @@ extends RefCounted
 ## В рабочие часы персонаж ВСЕГДА на работе, в часы сна — ВСЕГДА спит дома:
 ## это больше не конкурирующие "веса", а жёсткое правило (см. decide_action).
 ## Вне этих двух окон включается Utility AI: для каждого из оставшихся
-## действий (поесть/пообщаться/отдохнуть/погулять) считаем "полезность"
-## (score) и выбираем действие с максимальным score.
+## действий (поесть/пообщаться/отдохнуть/погулять/сходить в магазин) считаем
+## "полезность" (score) и выбираем действие с максимальным score.
 
 func decide_action(c: CharacterData, world) -> Dictionary:
 	if _is_work_time(c, world):
@@ -20,6 +20,7 @@ func decide_action(c: CharacterData, world) -> Dictionary:
 		_score_socialize(c, world, w),
 		_score_rest(c, world, w),
 		_score_wander(c, world, w),
+		_score_shop(c, world, w),
 	]
 
 	# Небольшой бонус к текущему действию, чтобы персонажи не "дёргались"
@@ -38,11 +39,19 @@ func _score_eat(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := c.hunger * w.eat_weight
 	if c.hunger > 70.0:
 		score += 25.0
+
+	var venue := _pick_open_building(world, [Enums.BuildingType.CAFE])
+	var building_id := c.home_building_id
+	var room_id := c.home_room_id
+	if venue != null:
+		building_id = venue.id
+		room_id = venue.rooms[0].id if venue.rooms.size() > 0 else 0
+
 	return {
 		"action": Enums.ActionType.EAT,
 		"score": score,
-		"building_id": c.home_building_id,
-		"room_id": c.home_room_id,
+		"building_id": building_id,
+		"room_id": room_id,
 	}
 
 func _score_socialize(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
@@ -54,7 +63,7 @@ func _score_socialize(c: CharacterData, world, w: DecisionWeights) -> Dictionary
 	else:
 		score -= 20.0
 
-	var venue: BuildingData = _pick_social_venue(world)
+	var venue := _pick_open_building(world, [Enums.BuildingType.BAR, Enums.BuildingType.CLUB])
 	var building_id := c.home_building_id
 	var room_id := c.home_room_id
 	if venue != null:
@@ -70,11 +79,20 @@ func _score_socialize(c: CharacterData, world, w: DecisionWeights) -> Dictionary
 
 func _score_rest(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := (100.0 - c.fun) * w.rest_weight + c.stress * 0.3
+
+	var building_id := c.home_building_id
+	var room_id := c.home_room_id
+	if randf() < w.park_rest_chance:
+		var park := _pick_open_building(world, [Enums.BuildingType.PARK])
+		if park != null:
+			building_id = park.id
+			room_id = park.rooms[0].id if park.rooms.size() > 0 else 0
+
 	return {
 		"action": Enums.ActionType.REST,
 		"score": score,
-		"building_id": c.home_building_id,
-		"room_id": c.home_room_id,
+		"building_id": building_id,
+		"room_id": room_id,
 	}
 
 func _score_wander(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
@@ -83,15 +101,37 @@ func _score_wander(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	if hour < 7 or hour > 23:
 		score -= 40.0
 
-	var shop: BuildingData = world.get_building_by_type(Enums.BuildingType.SHOP)
+	var park := _pick_open_building(world, [Enums.BuildingType.PARK])
 	var building_id := c.home_building_id
 	var room_id := c.home_room_id
-	if shop != null and shop.is_open(hour, world.current_day):
-		building_id = shop.id
-		room_id = shop.rooms[0].id if shop.rooms.size() > 0 else 0
+	if park != null:
+		building_id = park.id
+		room_id = park.rooms[0].id if park.rooms.size() > 0 else 0
 
 	return {
 		"action": Enums.ActionType.WANDER,
+		"score": score,
+		"building_id": building_id,
+		"room_id": room_id,
+	}
+
+func _score_shop(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
+	var score := (100.0 - c.fun) * w.shop_weight
+	var hour: int = world.current_hour
+	if hour < 8 or hour > 21:
+		score -= 30.0
+
+	var venue := _pick_open_building(world, [Enums.BuildingType.SHOP])
+	var building_id := c.home_building_id
+	var room_id := c.home_room_id
+	if venue != null:
+		building_id = venue.id
+		room_id = venue.rooms[0].id if venue.rooms.size() > 0 else 0
+	else:
+		score -= 1000.0 # "сходить в магазин, оставшись дома" смысла не имеет
+
+	return {
+		"action": Enums.ActionType.SHOP,
 		"score": score,
 		"building_id": building_id,
 		"room_id": room_id,
@@ -125,16 +165,15 @@ func _hour_in_range(hour: int, start: int, end: int) -> bool:
 		return hour >= start and hour < end
 	return hour >= start or hour < end # диапазон переходит через полночь
 
-func _pick_social_venue(world) -> BuildingData:
+## Случайное открытое сейчас здание среди нескольких типов (например бар ИЛИ
+## клуб) — в городе может быть несколько зданий одного типа одновременно.
+func _pick_open_building(world, types: Array) -> BuildingData:
 	var hour: int = world.current_hour
-	var options: Array[BuildingData] = []
-	var bar: BuildingData = world.get_building_by_type(Enums.BuildingType.BAR)
-	var club: BuildingData = world.get_building_by_type(Enums.BuildingType.CLUB)
 	var day: int = world.current_day
-	if bar != null and bar.is_open(hour, day):
-		options.append(bar)
-	if club != null and club.is_open(hour, day):
-		options.append(club)
+	var options: Array[BuildingData] = []
+	for b in world.buildings:
+		if types.has(b.building_type) and b.is_open(hour, day):
+			options.append(b)
 	if options.is_empty():
 		return null
 	return options[randi() % options.size()]

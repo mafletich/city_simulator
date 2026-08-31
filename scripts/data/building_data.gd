@@ -24,6 +24,15 @@ extends Resource
 @export var is_weekday_only: bool = false
 @export var workdays_label: String = "Ежедневно"
 
+## true у зданий, где хотя бы одна должность обязательна к покрытию (бар,
+## кафе, магазин и т.д. — бизнес не может работать без персонала). false —
+## у зданий с только необязательными должностями (парк: садовник может
+## отсутствовать, но само место остаётся открытым для посетителей).
+@export var has_required_staffing: bool = false
+## true — здание открыто для посетителей ВСЕГДА, вне зависимости от часов
+## работы и наличия персонала (парк как общественное пространство).
+@export var always_open_to_public: bool = false
+
 func get_room(room_id: int) -> RoomData:
 	for r in rooms:
 		if r.id == room_id:
@@ -38,8 +47,8 @@ func get_occupants() -> Array[int]:
 
 ## day — 0..6 (Пн..Вс), как World.current_day. Без него дни недели не учитываются.
 func is_open(hour: int, day: int = -1) -> bool:
-	if staff_count <= 0:
-		return true # жилые дома и т.п. — не заведения, "открыты" всегда
+	if always_open_to_public or staff_count <= 0:
+		return true # жилые дома, парк и т.п. — открыты для посетителей всегда
 	if is_weekday_only and day != -1 and day >= 5:
 		return false
 	if open_hour == close_hour:

@@ -88,7 +88,7 @@ func _format_character_details(c: CharacterData) -> String:
 		"Имя: %s" % c.full_name(),
 		"Пол: %s" % ("М" if c.gender == Enums.Gender.MALE else "Ж"),
 		"Возраст: %d" % c.age,
-		"Профессия: %s" % _profession_text(c.profession),
+		"Должность: %s" % _profession_text(c.profession),
 		"Отпечаток пальца: %s" % c.fingerprint,
 		"",
 		"Дом: %s" % (home_building.building_name if home_building != null else "—"),
@@ -133,6 +133,8 @@ func _action_text(action: Enums.ActionType) -> String:
 			return "Отдыхает"
 		Enums.ActionType.WANDER:
 			return "Гуляет"
+		Enums.ActionType.SHOP:
+			return "За покупками"
 	return "?"
 
 func _profession_text(p: Enums.Profession) -> String:
@@ -141,10 +143,26 @@ func _profession_text(p: Enums.Profession) -> String:
 			return "Безработный"
 		Enums.Profession.OFFICE_WORKER:
 			return "Офисный работник"
+		Enums.Profession.OFFICE_DIRECTOR:
+			return "Директор"
 		Enums.Profession.DOCTOR:
 			return "Врач"
+		Enums.Profession.CHIEF_DOCTOR:
+			return "Главный врач"
 		Enums.Profession.BARTENDER:
 			return "Бармен"
+		Enums.Profession.BAR_MANAGER:
+			return "Администратор"
 		Enums.Profession.SHOPKEEPER:
 			return "Продавец"
+		Enums.Profession.SHOP_MANAGER:
+			return "Управляющий магазином"
+		Enums.Profession.COOK:
+			return "Повар"
+		Enums.Profession.WAITER:
+			return "Официант"
+		Enums.Profession.CAFE_MANAGER:
+			return "Менеджер кафе"
+		Enums.Profession.GARDENER:
+			return "Садовник"
 	return "?"

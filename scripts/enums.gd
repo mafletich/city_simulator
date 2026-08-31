@@ -5,12 +5,22 @@ enum Gender {
 	FEMALE,
 }
 
+## Конкретная должность персонажа — не просто "сфера", а точный титул,
+## который виден в характеристиках (CharacterData.profession).
 enum Profession {
 	UNEMPLOYED,
 	OFFICE_WORKER,
+	OFFICE_DIRECTOR,
 	DOCTOR,
+	CHIEF_DOCTOR,
 	BARTENDER,
+	BAR_MANAGER,
 	SHOPKEEPER,
+	SHOP_MANAGER,
+	COOK,
+	WAITER,
+	CAFE_MANAGER,
+	GARDENER,
 }
 
 enum BuildingType {
@@ -20,6 +30,8 @@ enum BuildingType {
 	BAR,
 	CLUB,
 	SHOP,
+	CAFE,
+	PARK,
 }
 
 enum ActionType {
@@ -29,6 +41,7 @@ enum ActionType {
 	SOCIALIZE,
 	REST,
 	WANDER,
+	SHOP,
 }
 
 enum ScheduleType {
