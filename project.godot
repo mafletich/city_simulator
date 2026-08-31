@@ -18,7 +18,14 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 World="*res://scripts/systems/world_state.gd"
 
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/size/mode=3
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.1, 0.105, 0.13, 1)

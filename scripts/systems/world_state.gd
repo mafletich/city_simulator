@@ -125,8 +125,11 @@ func generate_city() -> void:
 		job_assignments.append(null)
 	job_assignments.shuffle()
 
+	# Общий на весь город реестр "уже занятых" полных имён — гарантирует
+	# отсутствие полных тёзок (совпадения и имени, и фамилии одновременно).
+	var used_full_names: Dictionary = {}
 	for i in range(CHARACTER_COUNT):
-		var c := _create_random_character(i, residential, job_assignments[i])
+		var c := _create_random_character(i, residential, job_assignments[i], used_full_names)
 		characters.append(c)
 
 	_place_all_characters_at_home()
@@ -154,12 +157,13 @@ func _create_building(id: int, building_name: String, type: Enums.BuildingType, 
 	b.rooms = rooms
 	return b
 
-func _create_random_character(id: int, residential: Array[BuildingData], vacancy) -> CharacterData:
+func _create_random_character(id: int, residential: Array[BuildingData], vacancy, used_full_names: Dictionary) -> CharacterData:
 	var c := CharacterData.new()
 	c.id = id
 	c.gender = Enums.Gender.MALE if randi() % 2 == 0 else Enums.Gender.FEMALE
-	c.first_name = NameGenerator.random_first_name(c.gender)
-	c.last_name = NameGenerator.random_last_name(c.gender)
+	var name := NameGenerator.generate_unique_full_name(c.gender, used_full_names)
+	c.first_name = name["first_name"]
+	c.last_name = name["last_name"]
 	c.age = randi_range(19, 65)
 	c.fingerprint = NameGenerator.random_fingerprint()
 
