@@ -1,0 +1,66 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/main.gd" id="1"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopBar" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TimeLabel" type="Label" parent="VBox/TopBar"]
+layout_mode = 2
+text = "Время: --"
+
+[node name="NextTickButton" type="Button" parent="VBox/TopBar"]
+layout_mode = 2
+text = "Следующий цикл (+10 мин)"
+
+[node name="Split" type="HSplitContainer" parent="VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BuildingsPanel" type="VBoxContainer" parent="VBox/Split"]
+layout_mode = 2
+custom_minimum_size = Vector2(260, 0)
+
+[node name="BuildingsLabel" type="Label" parent="VBox/Split/BuildingsPanel"]
+layout_mode = 2
+text = "Здания"
+
+[node name="BuildingsList" type="ItemList" parent="VBox/Split/BuildingsPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DetailsPanel" type="VBoxContainer" parent="VBox/Split"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(320, 0)
+
+[node name="BuildingNameLabel" type="Label" parent="VBox/Split/DetailsPanel"]
+layout_mode = 2
+text = "Выберите здание"
+
+[node name="CharactersList" type="ItemList" parent="VBox/Split/DetailsPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CharacterDetailsLabel" type="Label" parent="VBox/Split/DetailsPanel"]
+layout_mode = 2
+autowrap_mode = 3
+text = ""
