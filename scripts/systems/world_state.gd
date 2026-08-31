@@ -4,7 +4,12 @@ extends Node
 ## Хранит всех персонажей, все здания и игровое время; продвигает циклы.
 
 const MINUTES_PER_TICK: int = 10
-const CHARACTER_COUNT: int = 25
+## Ежедневные (не будни-only) заведения теперь всегда укомплектованы ПАРАМИ
+## 2/2-сотрудников на позицию (см. BuildingSchedules), чтобы гарантированно
+## не оставаться без персонала по выходным — это примерно удваивает спрос
+## на рабочую силу у баров/клубов/магазина/больницы, так что жителей города
+## тоже пришлось увеличить, иначе вакансии просто некому было бы закрыть.
+const CHARACTER_COUNT: int = 40
 
 const DAY_NAMES: Array[String] = [
 	"Понедельник", "Вторник", "Среда", "Четверг",
@@ -52,7 +57,7 @@ func generate_city() -> void:
 	var next_id := 0
 
 	var residential: Array[BuildingData] = []
-	for i in range(6):
+	for i in range(10):
 		var b := _create_building(next_id, "Жилой дом №%d" % (i + 1), Enums.BuildingType.RESIDENTIAL, 4)
 		next_id += 1
 		buildings.append(b)
@@ -72,6 +77,8 @@ func generate_city() -> void:
 		wp.open_hour = preset["open"]
 		wp.close_hour = preset["close"]
 		wp.schedule_label = preset["label"]
+		wp.is_weekday_only = BuildingSchedules.is_weekday_only(wp.building_type)
+		wp.workdays_label = "Пн–Пт" if wp.is_weekday_only else "Ежедневно"
 
 		var vacancies := BuildingSchedules.generate_vacancies(wp)
 		wp.staff_count = vacancies.size()
@@ -143,9 +150,10 @@ func _create_random_character(id: int, residential: Array[BuildingData], vacancy
 		# вакансии здания вместе покрывают весь его рабочий день без дыр.
 		c.work_start_hour = vacancy["start"]
 		c.work_end_hour = vacancy["end"]
-
-		c.schedule_type = Enums.ScheduleType.FIVE_TWO if randf() < 0.7 else Enums.ScheduleType.TWO_TWO
-		c.schedule_offset = randi() % 4
+		# График идёт прямо из вакансии, не рандомом — для ежедневных заведений
+		# это гарантированно "спаренный" 2/2, покрывающий все 7 дней без дыр.
+		c.schedule_type = vacancy["schedule_type"]
+		c.schedule_offset = vacancy["schedule_offset"]
 
 	_assign_sleep_hours(c)
 

@@ -6,9 +6,11 @@ extends RefCounted
 ## open == close значит "круглосуточно". close < open — диапазон через полночь
 ## (например 20:00–04:00), это не баг, а нормальный формат ночных заведений.
 
-## Сколько часов максимум длится одна смена и сколько человек нужно на смену
-## для этого типа здания — определяет, сколько вакансий сгенерируется, чтобы
-## суммарно покрыть все часы работы без "дыр".
+## Сколько часов максимум длится одна смена и сколько человек одновременно
+## нужно на смену для этого типа здания — определяет, сколько вакансий
+## сгенерируется, чтобы суммарно покрыть все часы работы без "дыр". Для
+## заведений, работающих все 7 дней, каждая позиция потом ещё удваивается
+## парой 2/2-сотрудников (см. generate_vacancies) — это уже не отсюда.
 static func get_shift_params(type: Enums.BuildingType) -> Dictionary:
 	match type:
 		Enums.BuildingType.OFFICE:
@@ -16,12 +18,19 @@ static func get_shift_params(type: Enums.BuildingType) -> Dictionary:
 		Enums.BuildingType.HOSPITAL:
 			return {"max_shift_length": 8, "workers_per_shift": 1}
 		Enums.BuildingType.BAR:
-			return {"max_shift_length": 6, "workers_per_shift": 1}
+			return {"max_shift_length": 8, "workers_per_shift": 1}
 		Enums.BuildingType.CLUB:
-			return {"max_shift_length": 6, "workers_per_shift": 1}
+			return {"max_shift_length": 8, "workers_per_shift": 1}
 		Enums.BuildingType.SHOP:
-			return {"max_shift_length": 7, "workers_per_shift": 2}
+			return {"max_shift_length": 8, "workers_per_shift": 1}
 	return {"max_shift_length": 8, "workers_per_shift": 1}
+
+## Какие дни недели работает заведение этого типа. Офисы — только будни (и
+## поэтому их вакансии обходятся одним 5/2-сотрудником: у него и так выходные
+## именно в эти дни). Всё остальное — каждый день, поэтому у них штат следует
+## устраивать парами (см. generate_vacancies), иначе по выходным будет пусто.
+static func is_weekday_only(type: Enums.BuildingType) -> bool:
+	return type == Enums.BuildingType.OFFICE
 
 ## Возвращает случайно выбираемый пул пресетов для типа здания.
 static func get_presets(type: Enums.BuildingType) -> Array[Dictionary]:
@@ -68,8 +77,20 @@ static func duration_hours(open_h: int, close_h: int) -> int:
 	return 24 - open_h + close_h
 
 ## Режет часы работы здания на смены, полностью покрывающие весь период без
-## пропусков, и возвращает список вакансий {"building", "start", "end"} —
-## по одной записи на каждое рабочее место в каждой смене.
+## пропусков, и возвращает список вакансий
+## {"building", "start", "end", "schedule_type", "schedule_offset"} — одна
+## запись на каждое рабочее место (уже с готовым графиком сотрудника, а не
+## только часами — это важно для того, кто именно должен выйти в выходные).
+##
+## Будни-заведение (офис): одна вакансия на позицию, график 5/2 — у такого
+## сотрудника выходные ровно Сб/Вс, когда здание и так закрыто, так что
+## "закрыто по выходным" и "у всех работников выходной" совпадают всегда.
+##
+## Ежедневное заведение: ДВЕ вакансии на позицию, обе 2/2, со смещением
+## графика ровно на 2 дня друг от друга. Это не рандомная эвристика: при
+## периоде цикла 4 дня (2 рабочих/2 выходных) смещение на 2 гарантированно
+## зеркалит рабочие и выходные дни — когда один из пары отдыхает, у второго
+## как раз рабочий день, и наоборот, для абсолютно любого дня.
 static func generate_vacancies(building: BuildingData) -> Array[Dictionary]:
 	var params := get_shift_params(building.building_type)
 	var max_shift_length: int = params["max_shift_length"]
@@ -86,6 +107,20 @@ static func generate_vacancies(building: BuildingData) -> Array[Dictionary]:
 		var length: int = base_length + (1 if i < remainder else 0)
 		var shift_end: int = (cursor + length) % 24
 		for w in range(workers_per_shift):
-			vacancies.append({"building": building, "start": cursor, "end": shift_end})
+			if building.is_weekday_only:
+				vacancies.append({
+					"building": building, "start": cursor, "end": shift_end,
+					"schedule_type": Enums.ScheduleType.FIVE_TWO, "schedule_offset": 0,
+				})
+			else:
+				var base_offset := randi() % 4
+				vacancies.append({
+					"building": building, "start": cursor, "end": shift_end,
+					"schedule_type": Enums.ScheduleType.TWO_TWO, "schedule_offset": base_offset,
+				})
+				vacancies.append({
+					"building": building, "start": cursor, "end": shift_end,
+					"schedule_type": Enums.ScheduleType.TWO_TWO, "schedule_offset": (base_offset + 2) % 4,
+				})
 		cursor = shift_end
 	return vacancies

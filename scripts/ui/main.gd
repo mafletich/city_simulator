@@ -46,7 +46,7 @@ func _refresh_buildings_list() -> void:
 		var occupant_count := b.get_occupants().size()
 		var status := ""
 		if b.staff_count > 0:
-			status = " — Открыто" if b.is_open(World.current_hour) else " — Закрыто"
+			status = " — Открыто" if b.is_open(World.current_hour, World.current_day) else " — Закрыто"
 		buildings_list.add_item("%s (%d чел.)%s" % [b.building_name, occupant_count, status])
 		if b.id == previous_selection:
 			buildings_list.select(i)
@@ -61,8 +61,8 @@ func _on_building_selected(index: int) -> void:
 func _building_header_text(b: BuildingData) -> String:
 	if b.staff_count <= 0:
 		return b.building_name
-	var status := "Открыто" if b.is_open(World.current_hour) else "Закрыто"
-	return "%s\n%s — %s (сотрудников: %d)" % [b.building_name, b.schedule_label, status, b.staff_count]
+	var status := "Открыто" if b.is_open(World.current_hour, World.current_day) else "Закрыто"
+	return "%s\n%s, %s — %s (сотрудников: %d)" % [b.building_name, b.workdays_label, b.schedule_label, status, b.staff_count]
 
 func _refresh_characters_list() -> void:
 	characters_list.clear()

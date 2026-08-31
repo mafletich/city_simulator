@@ -14,6 +14,16 @@ extends Resource
 @export var close_hour: int = 0
 @export var schedule_label: String = ""
 
+## Дни недели работы. Если true — закрыто по субботам/воскресеньям (и штат
+## состоит только из 5/2-сотрудников, у которых как раз эти дни выходные —
+## так что "закрыт по выходным" и "у всех работников выходной" совпадают
+## по построению, а не случайно). Если false — открыто все 7 дней; тогда
+## штат каждой позиции — пара 2/2-сотрудников со смещением графика ровно
+## на 2 дня, что математически гарантирует: каждый день недели кто-то из
+## пары работает (см. BuildingSchedules.generate_vacancies).
+@export var is_weekday_only: bool = false
+@export var workdays_label: String = "Ежедневно"
+
 func get_room(room_id: int) -> RoomData:
 	for r in rooms:
 		if r.id == room_id:
@@ -26,9 +36,12 @@ func get_occupants() -> Array[int]:
 		ids.append_array(r.occupant_ids)
 	return ids
 
-func is_open(hour: int) -> bool:
+## day — 0..6 (Пн..Вс), как World.current_day. Без него дни недели не учитываются.
+func is_open(hour: int, day: int = -1) -> bool:
 	if staff_count <= 0:
 		return true # жилые дома и т.п. — не заведения, "открыты" всегда
+	if is_weekday_only and day != -1 and day >= 5:
+		return false
 	if open_hour == close_hour:
 		return true
 	if open_hour < close_hour:

@@ -86,7 +86,7 @@ func _score_wander(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var shop: BuildingData = world.get_building_by_type(Enums.BuildingType.SHOP)
 	var building_id := c.home_building_id
 	var room_id := c.home_room_id
-	if shop != null and shop.is_open(hour):
+	if shop != null and shop.is_open(hour, world.current_day):
 		building_id = shop.id
 		room_id = shop.rooms[0].id if shop.rooms.size() > 0 else 0
 
@@ -130,9 +130,10 @@ func _pick_social_venue(world) -> BuildingData:
 	var options: Array[BuildingData] = []
 	var bar: BuildingData = world.get_building_by_type(Enums.BuildingType.BAR)
 	var club: BuildingData = world.get_building_by_type(Enums.BuildingType.CLUB)
-	if bar != null and bar.is_open(hour):
+	var day: int = world.current_day
+	if bar != null and bar.is_open(hour, day):
 		options.append(bar)
-	if club != null and club.is_open(hour):
+	if club != null and club.is_open(hour, day):
 		options.append(club)
 	if options.is_empty():
 		return null
