@@ -99,7 +99,7 @@ theme_override_constants/separation = 10
 [node name="BuildingsPanel" type="PanelContainer" parent="VBox/ContentArea"]
 layout_mode = 2
 size_flags_horizontal = 0
-custom_minimum_size = Vector2(340, 0)
+custom_minimum_size = Vector2(300, 0)
 theme_override_styles/panel = SubResource("PanelBG")
 
 [node name="BuildingsMargin" type="MarginContainer" parent="VBox/ContentArea/BuildingsPanel"]
@@ -124,10 +124,39 @@ size_flags_vertical = 3
 theme_override_font_sizes/font_size = 16
 theme_override_constants/v_separation = 6
 
+[node name="RoomsPanel" type="PanelContainer" parent="VBox/ContentArea"]
+layout_mode = 2
+size_flags_horizontal = 0
+custom_minimum_size = Vector2(260, 0)
+theme_override_styles/panel = SubResource("PanelBG")
+
+[node name="RoomsMargin" type="MarginContainer" parent="VBox/ContentArea/RoomsPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="RoomsVBox" type="VBoxContainer" parent="VBox/ContentArea/RoomsPanel/RoomsMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RoomsHeader" type="Label" parent="VBox/ContentArea/RoomsPanel/RoomsMargin/RoomsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+autowrap_mode = 3
+text = "Выберите здание слева"
+
+[node name="RoomsList" type="ItemList" parent="VBox/ContentArea/RoomsPanel/RoomsMargin/RoomsVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/font_size = 16
+theme_override_constants/v_separation = 6
+
 [node name="CharactersPanel" type="PanelContainer" parent="VBox/ContentArea"]
 layout_mode = 2
 size_flags_horizontal = 0
-custom_minimum_size = Vector2(360, 0)
+custom_minimum_size = Vector2(300, 0)
 theme_override_styles/panel = SubResource("PanelBG")
 
 [node name="CharactersMargin" type="MarginContainer" parent="VBox/ContentArea/CharactersPanel"]
@@ -145,7 +174,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 autowrap_mode = 3
-text = "Выберите здание слева"
+text = "Выберите комнату"
 
 [node name="CharactersList" type="ItemList" parent="VBox/ContentArea/CharactersPanel/CharactersMargin/CharactersVBox"]
 layout_mode = 2
@@ -174,7 +203,7 @@ custom_minimum_size = Vector2(500, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 theme_override_colors/font_color = Color(0.6, 0.62, 0.68, 1)
-text = "Выберите здание, а затем персонажа внутри него, чтобы увидеть подробную информацию."
+text = "Выберите здание, затем комнату в нём, затем персонажа внутри неё, чтобы увидеть подробную информацию."
 autowrap_mode = 3
 
 [node name="ContentVBox" type="VBoxContainer" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll"]

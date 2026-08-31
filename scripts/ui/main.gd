@@ -7,6 +7,8 @@ extends Control
 @onready var weights_panel: PanelContainer = $WeightsPanel
 
 @onready var buildings_list: ItemList = $VBox/ContentArea/BuildingsPanel/BuildingsMargin/BuildingsVBox/BuildingsList
+@onready var rooms_header: Label = $VBox/ContentArea/RoomsPanel/RoomsMargin/RoomsVBox/RoomsHeader
+@onready var rooms_list: ItemList = $VBox/ContentArea/RoomsPanel/RoomsMargin/RoomsVBox/RoomsList
 @onready var characters_header: Label = $VBox/ContentArea/CharactersPanel/CharactersMargin/CharactersVBox/CharactersHeader
 @onready var characters_list: ItemList = $VBox/ContentArea/CharactersPanel/CharactersMargin/CharactersVBox/CharactersList
 
@@ -41,8 +43,9 @@ const DETAILS_ROOT := "VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll
 @onready var stress_value_label: Label = get_node(DETAILS_ROOT + "ContentVBox/StressRow/ValueLabel")
 
 var selected_building_id: int = -1
+var selected_room_id: int = -1
 var selected_character_id: int = -1
-var characters_in_selected_building: Array[CharacterData] = []
+var characters_in_selected_room: Array[CharacterData] = []
 var is_following: bool = false
 
 func _ready() -> void:
@@ -51,6 +54,7 @@ func _ready() -> void:
 	logs_button.pressed.connect(_on_logs_button_pressed)
 	follow_button.toggled.connect(_on_follow_toggled)
 	buildings_list.item_selected.connect(_on_building_selected)
+	rooms_list.item_selected.connect(_on_room_selected)
 	characters_list.item_selected.connect(_on_character_selected)
 
 	_refresh_buildings_list()
@@ -72,17 +76,20 @@ func _on_next_tick_pressed() -> void:
 		_apply_follow()
 	else:
 		if selected_building_id != -1:
-			characters_header.text = _building_header_text(World.get_building(selected_building_id))
+			rooms_header.text = _building_header_text(World.get_building(selected_building_id))
+			_refresh_rooms_list()
+		if selected_room_id != -1:
 			_refresh_characters_list()
 		_refresh_selected_character_details()
 
-## Режим слежки: если наблюдаемый персонаж сменил здание, переключаем
-## вкладку зданий на то, куда он переместился, и заново выделяем его в
+## Режим слежки: если наблюдаемый персонаж сменил здание или комнату,
+## переключаем вкладки на то, куда он переместился, и заново выделяем его в
 ## списке персонажей — так что игрока "перебрасывает" вслед за ним.
 func _apply_follow() -> void:
 	var c := World.get_character(selected_character_id)
 	if c == null:
 		return
+
 	if c.current_building_id != selected_building_id:
 		for i in range(World.buildings.size()):
 			if World.buildings[i].id == c.current_building_id:
@@ -90,9 +97,20 @@ func _apply_follow() -> void:
 				_on_building_selected(i)
 				break
 	else:
-		_refresh_characters_list()
-	for i in range(characters_in_selected_building.size()):
-		if characters_in_selected_building[i].id == c.id:
+		_refresh_rooms_list()
+
+	var b := World.get_building(selected_building_id)
+	if b != null:
+		for i in range(b.rooms.size()):
+			if b.rooms[i].id == c.current_room_id:
+				rooms_list.select(i)
+				selected_room_id = c.current_room_id
+				characters_header.text = _room_header_text(b.rooms[i])
+				break
+
+	_refresh_characters_list()
+	for i in range(characters_in_selected_room.size()):
+		if characters_in_selected_room[i].id == c.id:
 			characters_list.select(i)
 			break
 	_show_character_details(c)
@@ -119,8 +137,12 @@ func _refresh_buildings_list() -> void:
 func _on_building_selected(index: int) -> void:
 	var b: BuildingData = World.buildings[index]
 	selected_building_id = b.id
-	characters_header.text = _building_header_text(b)
-	_refresh_characters_list()
+	selected_room_id = -1
+	rooms_header.text = _building_header_text(b)
+	_refresh_rooms_list()
+	characters_header.text = "Выберите комнату слева"
+	characters_list.clear()
+	characters_in_selected_room = []
 
 func _building_header_text(b: BuildingData) -> String:
 	if b == null:
@@ -130,31 +152,63 @@ func _building_header_text(b: BuildingData) -> String:
 	var status := "Открыто" if b.is_open(World.current_hour, World.current_day) else "Закрыто"
 	return "%s\n%s, %s — %s (сотрудников: %d)" % [b.building_name, b.workdays_label, b.schedule_label, status, b.staff_count]
 
+func _refresh_rooms_list() -> void:
+	var previous_selection := selected_room_id
+	rooms_list.clear()
+	var b := World.get_building(selected_building_id)
+	if b == null:
+		return
+	for i in range(b.rooms.size()):
+		var r: RoomData = b.rooms[i]
+		rooms_list.add_item("%s (%d чел.)" % [_room_list_label(b, r), r.occupant_ids.size()])
+		if r.id == previous_selection:
+			rooms_list.select(i)
+
+func _room_list_label(b: BuildingData, r: RoomData) -> String:
+	var label := Enums.room_type_text(r.kind)
+	if b.building_type == Enums.BuildingType.RESIDENTIAL:
+		label += " (кв. %d)" % (r.apartment_index + 1)
+	return label
+
+func _room_header_text(r: RoomData) -> String:
+	var b := World.get_building(selected_building_id)
+	return _room_list_label(b, r) if b != null else Enums.room_type_text(r.kind)
+
+func _on_room_selected(index: int) -> void:
+	var b := World.get_building(selected_building_id)
+	if b == null:
+		return
+	var r: RoomData = b.rooms[index]
+	selected_room_id = r.id
+	characters_header.text = _room_header_text(r)
+	_refresh_characters_list()
+
 func _refresh_characters_list() -> void:
 	var previous_selection := selected_character_id
 	characters_list.clear()
-	characters_in_selected_building = World.get_characters_in_building(selected_building_id)
-	for i in range(characters_in_selected_building.size()):
-		var c := characters_in_selected_building[i]
+	characters_in_selected_room = World.get_characters_in_room(selected_building_id, selected_room_id)
+	for i in range(characters_in_selected_room.size()):
+		var c := characters_in_selected_room[i]
 		characters_list.add_item("%s — %s" % [c.full_name(), _action_summary(c)])
 		if c.id == previous_selection:
 			characters_list.select(i)
 
 func _on_character_selected(index: int) -> void:
-	var c: CharacterData = characters_in_selected_building[index]
+	var c: CharacterData = characters_in_selected_room[index]
 	selected_character_id = c.id
 	_show_character_details(c)
 
 func _refresh_selected_character_details() -> void:
 	if selected_character_id == -1:
 		return
-	for c in characters_in_selected_building:
+	for c in characters_in_selected_room:
 		if c.id == selected_character_id:
 			_show_character_details(c)
 			return
-	# Персонаж, за которым мы наблюдали, покинул это здание — карточка остаётся
-	# на экране (последнее известное состояние), просто больше не обновляется.
-	# (Чтобы автоматически переключаться вслед за ним — включи "Слежка".)
+	# Персонаж, за которым мы наблюдали, покинул эту комнату — карточка
+	# остаётся на экране (последнее известное состояние), просто больше не
+	# обновляется. (Чтобы автоматически переключаться вслед за ним — включи
+	# "Слежка".)
 
 func _action_summary(c: CharacterData) -> String:
 	var text := Enums.action_text(c.current_action)

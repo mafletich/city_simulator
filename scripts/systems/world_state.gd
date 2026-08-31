@@ -518,5 +518,12 @@ func get_characters_in_building(building_id: int) -> Array[CharacterData]:
 			result.append(c)
 	return result
 
+func get_characters_in_room(building_id: int, room_id: int) -> Array[CharacterData]:
+	var result: Array[CharacterData] = []
+	for c in characters:
+		if c.current_building_id == building_id and c.current_room_id == room_id:
+			result.append(c)
+	return result
+
 func get_current_time_string() -> String:
 	return "День %d — %s, %02d:%02d" % [total_days_elapsed + 1, DAY_NAMES[current_day], current_hour, current_minute]
