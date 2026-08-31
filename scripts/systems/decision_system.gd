@@ -1,25 +1,25 @@
 class_name DecisionSystem
 extends RefCounted
 
-## Utility AI: для каждого персонажа считаем "полезность" (score) каждого
-## возможного действия и выбираем действие с максимальным score.
-## "Расписание" (рабочие часы / часы сна) — не отдельный механизм,
-## а просто очень большой бонус/штраф внутри той же системы весов — так он
-## почти всегда побеждает, но теоретически может быть перебит крайней нуждой
-## (например, дичайшим голодом), что и даёт "скорее всего", а не "всегда".
+## В рабочие часы персонаж ВСЕГДА на работе, в часы сна — ВСЕГДА спит дома:
+## это больше не конкурирующие "веса", а жёсткое правило (см. decide_action).
+## Вне этих двух окон включается Utility AI: для каждого из оставшихся
+## действий (поесть/пообщаться/отдохнуть/погулять) считаем "полезность"
+## (score) и выбираем действие с максимальным score.
 
 func decide_action(c: CharacterData, world) -> Dictionary:
-	var w: DecisionWeights = world.weights
-	var work_time := _is_work_time(c, world)
-	var sleep_time := _is_sleep_time(c, world)
+	if _is_work_time(c, world):
+		return _fixed_action(Enums.ActionType.WORK, c.work_building_id, c.work_room_id)
 
+	if _is_sleep_time(c, world):
+		return _fixed_action(Enums.ActionType.SLEEP, c.home_building_id, c.home_room_id)
+
+	var w: DecisionWeights = world.weights
 	var candidates: Array[Dictionary] = [
-		_score_sleep(c, world, w, sleep_time, work_time),
-		_score_work(c, world, w, work_time),
-		_score_eat(c, world, w, work_time),
-		_score_socialize(c, world, w, work_time),
-		_score_rest(c, world, w, work_time),
-		_score_wander(c, world, w, work_time),
+		_score_eat(c, world, w),
+		_score_socialize(c, world, w),
+		_score_rest(c, world, w),
+		_score_wander(c, world, w),
 	]
 
 	# Небольшой бонус к текущему действию, чтобы персонажи не "дёргались"
@@ -31,46 +31,13 @@ func decide_action(c: CharacterData, world) -> Dictionary:
 	candidates.sort_custom(func(a, b): return a["score"] > b["score"])
 	return candidates[0]
 
-func _score_sleep(c: CharacterData, world, w: DecisionWeights, sleep_time: bool, work_time: bool) -> Dictionary:
-	# Намеренно небольшой множитель у голой усталости: график сна должен
-	# решать почти всё сам, а не "накопилась усталость — лёг спать в 17:00".
-	var score := (100.0 - c.energy) * 0.6
-	if sleep_time:
-		score += w.schedule_sleep_bonus
-	elif work_time:
-		score -= w.off_schedule_penalty
-	else:
-		# Не рабочее и не сонное время (вечер после работы, выходной днём) —
-		# спать ещё рано, только очень низкая энергия сможет это перебить.
-		score -= w.off_schedule_penalty * 0.5
-	if c.energy > 90.0:
-		score -= 200.0
-	return {
-		"action": Enums.ActionType.SLEEP,
-		"score": score,
-		"building_id": c.home_building_id,
-		"room_id": c.home_room_id,
-	}
+func _fixed_action(action: Enums.ActionType, building_id: int, room_id: int) -> Dictionary:
+	return {"action": action, "score": 9999.0, "building_id": building_id, "room_id": room_id}
 
-func _score_work(c: CharacterData, world, w: DecisionWeights, work_time: bool) -> Dictionary:
-	var score := -1000.0
-	if work_time:
-		score = w.work_base_score * c.trait_workaholic
-		score += w.schedule_work_bonus
-		score -= c.stress * 0.3
-	return {
-		"action": Enums.ActionType.WORK,
-		"score": score,
-		"building_id": c.work_building_id,
-		"room_id": c.work_room_id,
-	}
-
-func _score_eat(c: CharacterData, world, w: DecisionWeights, work_time: bool) -> Dictionary:
+func _score_eat(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := c.hunger * w.eat_weight
 	if c.hunger > 70.0:
 		score += 25.0
-	if work_time:
-		score -= w.off_schedule_penalty * 0.5 # перекусить на рабочем месте всё же можно
 	return {
 		"action": Enums.ActionType.EAT,
 		"score": score,
@@ -78,7 +45,7 @@ func _score_eat(c: CharacterData, world, w: DecisionWeights, work_time: bool) ->
 		"room_id": c.home_room_id,
 	}
 
-func _score_socialize(c: CharacterData, world, w: DecisionWeights, work_time: bool) -> Dictionary:
+func _score_socialize(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := (100.0 - c.social) * c.trait_social * w.socialize_weight
 	score -= c.trait_loner * 30.0
 	var hour: int = world.current_hour
@@ -86,8 +53,6 @@ func _score_socialize(c: CharacterData, world, w: DecisionWeights, work_time: bo
 		score += 15.0
 	else:
 		score -= 20.0
-	if work_time:
-		score -= w.off_schedule_penalty
 
 	var venue: BuildingData = _pick_social_venue(world)
 	var building_id := c.home_building_id
@@ -103,10 +68,8 @@ func _score_socialize(c: CharacterData, world, w: DecisionWeights, work_time: bo
 		"room_id": room_id,
 	}
 
-func _score_rest(c: CharacterData, world, w: DecisionWeights, work_time: bool) -> Dictionary:
+func _score_rest(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := (100.0 - c.fun) * w.rest_weight + c.stress * 0.3
-	if work_time:
-		score -= w.off_schedule_penalty
 	return {
 		"action": Enums.ActionType.REST,
 		"score": score,
@@ -114,18 +77,16 @@ func _score_rest(c: CharacterData, world, w: DecisionWeights, work_time: bool) -
 		"room_id": c.home_room_id,
 	}
 
-func _score_wander(c: CharacterData, world, w: DecisionWeights, work_time: bool) -> Dictionary:
+func _score_wander(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := (100.0 - c.fun) * w.wander_weight
 	var hour: int = world.current_hour
-	if work_time:
-		score -= w.off_schedule_penalty
 	if hour < 7 or hour > 23:
 		score -= 40.0
 
 	var shop: BuildingData = world.get_building_by_type(Enums.BuildingType.SHOP)
 	var building_id := c.home_building_id
 	var room_id := c.home_room_id
-	if shop != null:
+	if shop != null and shop.is_open(hour):
 		building_id = shop.id
 		room_id = shop.rooms[0].id if shop.rooms.size() > 0 else 0
 
@@ -165,12 +126,13 @@ func _hour_in_range(hour: int, start: int, end: int) -> bool:
 	return hour >= start or hour < end # диапазон переходит через полночь
 
 func _pick_social_venue(world) -> BuildingData:
+	var hour: int = world.current_hour
 	var options: Array[BuildingData] = []
 	var bar: BuildingData = world.get_building_by_type(Enums.BuildingType.BAR)
 	var club: BuildingData = world.get_building_by_type(Enums.BuildingType.CLUB)
-	if bar != null:
+	if bar != null and bar.is_open(hour):
 		options.append(bar)
-	if club != null:
+	if club != null and club.is_open(hour):
 		options.append(club)
 	if options.is_empty():
 		return null

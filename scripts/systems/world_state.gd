@@ -5,7 +5,6 @@ extends Node
 
 const MINUTES_PER_TICK: int = 10
 const CHARACTER_COUNT: int = 25
-const UNEMPLOYED_COUNT: int = 5
 
 const DAY_NAMES: Array[String] = [
 	"Понедельник", "Вторник", "Среда", "Четверг",
@@ -67,16 +66,27 @@ func generate_city() -> void:
 	var shop := _create_building(next_id, "Магазин", Enums.BuildingType.SHOP, 8); next_id += 1
 
 	var workplaces: Array[BuildingData] = [office1, office2, hospital, bar, club, shop]
+	var all_vacancies: Array[Dictionary] = []
 	for wp in workplaces:
-		wp.max_workers = 4
+		var preset := BuildingSchedules.pick_random_preset(wp.building_type)
+		wp.open_hour = preset["open"]
+		wp.close_hour = preset["close"]
+		wp.schedule_label = preset["label"]
+
+		var vacancies := BuildingSchedules.generate_vacancies(wp)
+		wp.staff_count = vacancies.size()
+		all_vacancies.append_array(vacancies)
 		buildings.append(wp)
 
-	# 20 рабочих мест раскиданы поровну по 6 местам работы (не больше max_workers
-	# каждое), оставшиеся 5 персонажей из CHARACTER_COUNT остаются безработными.
+	# Вакансии раскиданы случайно между персонажами; если вакансий больше, чем
+	# людей в городе, лишние остаются незаполненными — такое бывает, если
+	# городу не повезло со случайными часами работы (много круглосуточных).
+	all_vacancies.shuffle()
+	var employed_count: int = min(all_vacancies.size(), CHARACTER_COUNT)
 	var job_assignments: Array = []
-	for i in range(CHARACTER_COUNT - UNEMPLOYED_COUNT):
-		job_assignments.append(workplaces[i % workplaces.size()])
-	for i in range(UNEMPLOYED_COUNT):
+	for i in range(employed_count):
+		job_assignments.append(all_vacancies[i])
+	for i in range(CHARACTER_COUNT - employed_count):
 		job_assignments.append(null)
 	job_assignments.shuffle()
 
@@ -109,7 +119,7 @@ func _create_building(id: int, building_name: String, type: Enums.BuildingType, 
 	b.rooms = rooms
 	return b
 
-func _create_random_character(id: int, residential: Array[BuildingData], workplace: BuildingData) -> CharacterData:
+func _create_random_character(id: int, residential: Array[BuildingData], vacancy) -> CharacterData:
 	var c := CharacterData.new()
 	c.id = id
 	c.gender = Enums.Gender.MALE if randi() % 2 == 0 else Enums.Gender.FEMALE
@@ -118,21 +128,21 @@ func _create_random_character(id: int, residential: Array[BuildingData], workpla
 	c.age = randi_range(19, 65)
 	c.fingerprint = NameGenerator.random_fingerprint()
 
-	if workplace == null:
+	if vacancy == null:
 		c.profession = Enums.Profession.UNEMPLOYED
 		c.work_building_id = -1
 		c.work_room_id = -1
 		c.work_start_hour = -1
 		c.work_end_hour = -1
 	else:
+		var workplace: BuildingData = vacancy["building"]
 		c.profession = _profession_for_building_type(workplace.building_type)
 		c.work_building_id = workplace.id
 		c.work_room_id = 0
-
-		var starts: Array[int] = [7, 8, 9]
-		var durations: Array[int] = [7, 8, 9]
-		c.work_start_hour = starts[randi() % starts.size()]
-		c.work_end_hour = (c.work_start_hour + durations[randi() % durations.size()]) % 24
+		# Часы смены идут прямо из вакансии (см. BuildingSchedules) — так все
+		# вакансии здания вместе покрывают весь его рабочий день без дыр.
+		c.work_start_hour = vacancy["start"]
+		c.work_end_hour = vacancy["end"]
 
 		c.schedule_type = Enums.ScheduleType.FIVE_TWO if randf() < 0.7 else Enums.ScheduleType.TWO_TWO
 		c.schedule_offset = randi() % 4
@@ -263,7 +273,18 @@ func _resolve_work_activities() -> void:
 		var building := get_building(building_id)
 		if building == null:
 			continue
-		var workers: Array = workers_by_building[building_id]
+		var all_workers: Array = workers_by_building[building_id]
+
+		# "Едят, не покидая работу" — если сильно проголодался, перекусывает
+		# на месте вместо своей обычной рабочей под-активности этот цикл.
+		var workers: Array = []
+		for wk in all_workers:
+			if wk.hunger > weights.work_lunch_hunger_threshold:
+				wk.current_activity_detail = "Обедает на рабочем месте"
+				wk.hunger = clamp(wk.hunger - weights.work_lunch_relief, 0.0, 100.0)
+			else:
+				workers.append(wk)
+
 		match building.building_type:
 			Enums.BuildingType.BAR, Enums.BuildingType.CLUB:
 				_resolve_bartender_activities(building, workers)

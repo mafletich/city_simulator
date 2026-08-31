@@ -26,6 +26,9 @@ func _on_next_tick_pressed() -> void:
 	_update_time_label()
 	_refresh_buildings_list()
 	if selected_building_id != -1:
+		var b := World.get_building(selected_building_id)
+		if b != null:
+			building_name_label.text = _building_header_text(b)
 		_refresh_characters_list()
 		character_details_label.text = ""
 
@@ -41,16 +44,25 @@ func _refresh_buildings_list() -> void:
 	for i in range(World.buildings.size()):
 		var b: BuildingData = World.buildings[i]
 		var occupant_count := b.get_occupants().size()
-		buildings_list.add_item("%s (%d чел.)" % [b.building_name, occupant_count])
+		var status := ""
+		if b.staff_count > 0:
+			status = " — Открыто" if b.is_open(World.current_hour) else " — Закрыто"
+		buildings_list.add_item("%s (%d чел.)%s" % [b.building_name, occupant_count, status])
 		if b.id == previous_selection:
 			buildings_list.select(i)
 
 func _on_building_selected(index: int) -> void:
 	var b: BuildingData = World.buildings[index]
 	selected_building_id = b.id
-	building_name_label.text = b.building_name
+	building_name_label.text = _building_header_text(b)
 	character_details_label.text = ""
 	_refresh_characters_list()
+
+func _building_header_text(b: BuildingData) -> String:
+	if b.staff_count <= 0:
+		return b.building_name
+	var status := "Открыто" if b.is_open(World.current_hour) else "Закрыто"
+	return "%s\n%s — %s (сотрудников: %d)" % [b.building_name, b.schedule_label, status, b.staff_count]
 
 func _refresh_characters_list() -> void:
 	characters_list.clear()
