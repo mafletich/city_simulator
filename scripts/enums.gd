@@ -30,3 +30,8 @@ enum ActionType {
 	REST,
 	WANDER,
 }
+
+enum ScheduleType {
+	FIVE_TWO,
+	TWO_TWO,
+}

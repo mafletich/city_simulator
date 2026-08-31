@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/main.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ui/weights_panel.gd" id="2"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -30,6 +31,10 @@ text = "Время: --"
 [node name="NextTickButton" type="Button" parent="VBox/TopBar"]
 layout_mode = 2
 text = "Следующий цикл (+10 мин)"
+
+[node name="WeightsButton" type="Button" parent="VBox/TopBar"]
+layout_mode = 2
+text = "Настройки весов"
 
 [node name="Split" type="HSplitContainer" parent="VBox"]
 layout_mode = 2
@@ -64,3 +69,22 @@ size_flags_vertical = 3
 layout_mode = 2
 autowrap_mode = 3
 text = ""
+
+[node name="WeightsPanel" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchor_left = 1.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -380.0
+offset_right = 0.0
+grow_horizontal = 0
+script = ExtResource("2")
+
+[node name="Scroll" type="ScrollContainer" parent="WeightsPanel"]
+layout_mode = 2
+
+[node name="RowsContainer" type="VBoxContainer" parent="WeightsPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3

@@ -5,6 +5,8 @@ extends Resource
 @export var building_name: String = ""
 @export var building_type: Enums.BuildingType = Enums.BuildingType.RESIDENTIAL
 @export var rooms: Array[RoomData] = []
+## Сколько человек может официально работать в этом здании (0 = не место работы).
+@export var max_workers: int = 0
 
 func get_room(room_id: int) -> RoomData:
 	for r in rooms:

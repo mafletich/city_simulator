@@ -18,7 +18,13 @@ extends Resource
 ## Примерное расписание. -1 у work_start_hour значит "не работает".
 @export var work_start_hour: int = -1
 @export var work_end_hour: int = -1
-@export var sleep_hour: int = 23
+@export var schedule_type: Enums.ScheduleType = Enums.ScheduleType.FIVE_TWO
+## Для TWO_TWO — сдвиг фазы 2/2-цикла (0..3), чтобы не все были синхронны.
+@export var schedule_offset: int = 0
+
+## Часы сна как диапазон (может "переходить" через полночь: start > end).
+@export var sleep_start_hour: int = 23
+@export var sleep_end_hour: int = 7
 
 ## Черты характера — множители/бонусы для весов в системе принятия решений.
 @export var trait_workaholic: float = 1.0
@@ -34,6 +40,8 @@ var stress: float = 10.0
 
 ## Текущее состояние.
 var current_action: Enums.ActionType = Enums.ActionType.REST
+## Уточнение текущего действия ("Готовит коктейль для Марии", "Читает книгу" итд).
+var current_activity_detail: String = ""
 var current_building_id: int = -1
 var current_room_id: int = -1
 
