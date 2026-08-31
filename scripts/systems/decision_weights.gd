@@ -48,15 +48,15 @@ extends Resource
 
 ## --- Инерция: нежелание бросать текущее занятие, затухающее со временем ---
 ## "Заниматься тем же самым" — именно типом действия (отдыхать/гулять/...).
-@export var activity_stay_start_chance: float = 0.8
-@export var activity_stay_min_chance: float = 0.15
-@export var activity_stay_decay: float = 0.75
+@export var activity_stay_start_chance: float = 0.93
+@export var activity_stay_min_chance: float = 0.52
+@export var activity_stay_decay: float = 0.93
 ## "Остаться на том же месте" — проверяется только если решил заниматься тем
 ## же самым; иначе одно "не хочу бросать дело" внезапно означало бы ещё и
 ## "не хочу вставать с места", что не всегда логично связано.
-@export var location_stay_start_chance: float = 0.9
-@export var location_stay_min_chance: float = 0.2
-@export var location_stay_decay: float = 0.8
+@export var location_stay_start_chance: float = 0.97
+@export var location_stay_min_chance: float = 0.53
+@export var location_stay_decay: float = 0.94
 ## Если голод персонажа выше этого порога, инерция вообще не применяется —
 ## явное "хочу есть" всегда может пробить привычку сидеть в парке.
 @export var inertia_hunger_override: float = 65.0

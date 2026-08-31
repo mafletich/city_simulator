@@ -13,17 +13,20 @@ extends Control
 const DETAILS_ROOT := "VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/"
 @onready var placeholder_label: Label = get_node(DETAILS_ROOT + "PlaceholderLabel")
 @onready var details_content: VBoxContainer = get_node(DETAILS_ROOT + "ContentVBox")
-@onready var name_label: Label = get_node(DETAILS_ROOT + "ContentVBox/NameLabel")
+@onready var name_label: Label = get_node(DETAILS_ROOT + "ContentVBox/NameRow/NameLabel")
+@onready var follow_button: Button = get_node(DETAILS_ROOT + "ContentVBox/NameRow/FollowButton")
 @onready var subtitle_label: Label = get_node(DETAILS_ROOT + "ContentVBox/SubtitleLabel")
 @onready var gender_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/GenderValue")
 @onready var age_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/AgeValue")
 @onready var profession_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/ProfessionValue")
 @onready var home_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/HomeValue")
+@onready var room_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/RoomValue")
 @onready var work_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/WorkValue")
 @onready var work_hours_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/WorkHoursValue")
 @onready var sleep_hours_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/SleepHoursValue")
 @onready var schedule_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/ScheduleValue")
 @onready var fingerprint_value: Label = get_node(DETAILS_ROOT + "ContentVBox/FactsGrid/FingerprintValue")
+@onready var friends_label: Label = get_node(DETAILS_ROOT + "ContentVBox/FriendsLabel")
 @onready var action_label: Label = get_node(DETAILS_ROOT + "ContentVBox/ActionLabel")
 
 @onready var energy_bar: ProgressBar = get_node(DETAILS_ROOT + "ContentVBox/EnergyRow/Bar")
@@ -40,11 +43,13 @@ const DETAILS_ROOT := "VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll
 var selected_building_id: int = -1
 var selected_character_id: int = -1
 var characters_in_selected_building: Array[CharacterData] = []
+var is_following: bool = false
 
 func _ready() -> void:
 	next_tick_button.pressed.connect(_on_next_tick_pressed)
 	weights_button.pressed.connect(_on_weights_button_pressed)
 	logs_button.pressed.connect(_on_logs_button_pressed)
+	follow_button.toggled.connect(_on_follow_toggled)
 	buildings_list.item_selected.connect(_on_building_selected)
 	characters_list.item_selected.connect(_on_character_selected)
 
@@ -55,14 +60,42 @@ func _ready() -> void:
 func _on_logs_button_pressed() -> void:
 	OS.shell_open(EventLogger.get_log_dir_absolute())
 
+func _on_follow_toggled(pressed: bool) -> void:
+	is_following = pressed
+	follow_button.text = "  Слежка: Вкл  " if pressed else "  Слежка: Выкл  "
+
 func _on_next_tick_pressed() -> void:
 	World.advance_tick()
 	_update_time_label()
 	_refresh_buildings_list()
-	if selected_building_id != -1:
-		characters_header.text = _building_header_text(World.get_building(selected_building_id))
+	if is_following and selected_character_id != -1:
+		_apply_follow()
+	else:
+		if selected_building_id != -1:
+			characters_header.text = _building_header_text(World.get_building(selected_building_id))
+			_refresh_characters_list()
+		_refresh_selected_character_details()
+
+## Режим слежки: если наблюдаемый персонаж сменил здание, переключаем
+## вкладку зданий на то, куда он переместился, и заново выделяем его в
+## списке персонажей — так что игрока "перебрасывает" вслед за ним.
+func _apply_follow() -> void:
+	var c := World.get_character(selected_character_id)
+	if c == null:
+		return
+	if c.current_building_id != selected_building_id:
+		for i in range(World.buildings.size()):
+			if World.buildings[i].id == c.current_building_id:
+				buildings_list.select(i)
+				_on_building_selected(i)
+				break
+	else:
 		_refresh_characters_list()
-	_refresh_selected_character_details()
+	for i in range(characters_in_selected_building.size()):
+		if characters_in_selected_building[i].id == c.id:
+			characters_list.select(i)
+			break
+	_show_character_details(c)
 
 func _on_weights_button_pressed() -> void:
 	weights_panel.visible = not weights_panel.visible
@@ -121,6 +154,7 @@ func _refresh_selected_character_details() -> void:
 			return
 	# Персонаж, за которым мы наблюдали, покинул это здание — карточка остаётся
 	# на экране (последнее известное состояние), просто больше не обновляется.
+	# (Чтобы автоматически переключаться вслед за ним — включи "Слежка".)
 
 func _action_summary(c: CharacterData) -> String:
 	var text := Enums.action_text(c.current_action)
@@ -131,9 +165,12 @@ func _action_summary(c: CharacterData) -> String:
 func _show_character_details(c: CharacterData) -> void:
 	placeholder_label.visible = false
 	details_content.visible = true
+	follow_button.button_pressed = is_following
 
 	var home_building := World.get_building(c.home_building_id)
 	var work_building := World.get_building(c.work_building_id)
+	var current_building := World.get_building(c.current_building_id)
+	var current_room := current_building.get_room(c.current_room_id) if current_building != null else null
 
 	name_label.text = c.full_name()
 	subtitle_label.text = "%s · %d лет · %s" % [
@@ -144,12 +181,14 @@ func _show_character_details(c: CharacterData) -> void:
 	gender_value.text = "М" if c.gender == Enums.Gender.MALE else "Ж"
 	age_value.text = str(c.age)
 	profession_value.text = Enums.profession_text(c.profession)
-	home_value.text = home_building.building_name if home_building != null else "—"
+	home_value.text = "%s, кв. %d" % [home_building.building_name, c.home_apartment_index + 1] if home_building != null else "—"
+	room_value.text = Enums.room_type_text(current_room.kind) if current_room != null else "—"
 	work_value.text = work_building.building_name if work_building != null else "—"
 	work_hours_value.text = _work_hours_text(c)
 	sleep_hours_value.text = "%02d:00–%02d:00" % [c.sleep_start_hour, c.sleep_end_hour]
 	schedule_value.text = _schedule_text(c)
 	fingerprint_value.text = c.fingerprint
+	friends_label.text = "Друзья (%d): %s" % [c.friend_ids.size(), _friends_text(c)]
 
 	action_label.text = "Действие: %s" % _action_summary(c)
 
@@ -158,6 +197,16 @@ func _show_character_details(c: CharacterData) -> void:
 	_set_need(social_bar, social_value_label, c.social)
 	_set_need(fun_bar, fun_value_label, c.fun)
 	_set_need(stress_bar, stress_value_label, c.stress)
+
+func _friends_text(c: CharacterData) -> String:
+	if c.friend_ids.is_empty():
+		return "нет"
+	var names: Array[String] = []
+	for fid in c.friend_ids:
+		var friend := World.get_character(fid)
+		if friend != null:
+			names.append(friend.full_name())
+	return ", ".join(names)
 
 func _set_need(bar: ProgressBar, label: Label, value: float) -> void:
 	bar.value = value

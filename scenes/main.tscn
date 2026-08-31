@@ -183,10 +183,22 @@ visible = false
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="NameLabel" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox"]
+[node name="NameRow" type="HBoxContainer" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox"]
 layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="NameLabel" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox/NameRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
 theme_override_font_sizes/font_size = 34
 text = "Имя Фамилия"
+
+[node name="FollowButton" type="Button" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox/NameRow"]
+layout_mode = 2
+size_flags_vertical = 4
+toggle_mode = true
+text = "  Слежка: Выкл  "
 
 [node name="SubtitleLabel" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox"]
 layout_mode = 2
@@ -239,6 +251,15 @@ text = "Дом"
 layout_mode = 2
 text = "—"
 
+[node name="RoomKey" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox/FactsGrid"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
+text = "Сейчас в комнате"
+
+[node name="RoomValue" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox/FactsGrid"]
+layout_mode = 2
+text = "—"
+
 [node name="WorkKey" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox/FactsGrid"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
@@ -283,6 +304,11 @@ text = "Отпечаток пальца"
 [node name="FingerprintValue" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox/FactsGrid"]
 layout_mode = 2
 text = "—"
+
+[node name="FriendsLabel" type="Label" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "Друзья: —"
 
 [node name="Sep2" type="HSeparator" parent="VBox/ContentArea/DetailsPanel/DetailsMargin/DetailsScroll/ContentVBox"]
 layout_mode = 2

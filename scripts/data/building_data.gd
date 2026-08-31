@@ -39,6 +39,21 @@ func get_room(room_id: int) -> RoomData:
 			return r
 	return null
 
+## Первая комната данного типа в здании (для нежилых зданий обычно ровно
+## одна такая комната на тип — см. RoomLayouts).
+func get_room_by_kind(kind: Enums.RoomType) -> RoomData:
+	for r in rooms:
+		if r.kind == kind:
+			return r
+	return null
+
+## Комната конкретного типа внутри конкретной квартиры (только жилые дома).
+func get_apartment_room(apartment_index: int, kind: Enums.RoomType) -> RoomData:
+	for r in rooms:
+		if r.apartment_index == apartment_index and r.kind == kind:
+			return r
+	return null
+
 func get_occupants() -> Array[int]:
 	var ids: Array[int] = []
 	for r in rooms:

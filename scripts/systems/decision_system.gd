@@ -5,14 +5,17 @@ extends RefCounted
 ## это больше не конкурирующие "веса", а жёсткое правило (см. decide_action).
 ## Вне этих двух окон включается Utility AI: для каждого из оставшихся
 ## действий (поесть/пообщаться/отдохнуть/погулять/сходить в магазин) считаем
-## "полезность" (score) и выбираем действие с максимальным score.
+## "полезность" (score) и выбираем действие с максимальным score. Каждый
+## вариант несёт с собой не только здание, но и конкретную комнату в нём —
+## именно комната потом определяет, какой текст занятия допустим (см.
+## ActivityCatalog и World._apply_decision).
 
 func decide_action(c: CharacterData, world) -> Dictionary:
 	if _is_work_time(c, world):
 		return _fixed_action(Enums.ActionType.WORK, c.work_building_id, c.work_room_id)
 
 	if _is_sleep_time(c, world):
-		return _fixed_action(Enums.ActionType.SLEEP, c.home_building_id, c.home_room_id)
+		return _fixed_action(Enums.ActionType.SLEEP, c.home_building_id, _home_room_id(c, world, Enums.RoomType.BEDROOM))
 
 	var w: DecisionWeights = world.weights
 
@@ -46,6 +49,16 @@ func decide_action(c: CharacterData, world) -> Dictionary:
 
 func _fixed_action(action: Enums.ActionType, building_id: int, room_id: int) -> Dictionary:
 	return {"action": action, "score": 9999.0, "building_id": building_id, "room_id": room_id}
+
+## Комната указанного типа в СВОЕЙ квартире персонажа (спальня/гостиная/
+## кухня) — запасной вариант, если вдруг квартиры/дома не нашлось, -1
+## (тогда цель не сдвинется с текущего места, ничего не сломается).
+func _home_room_id(c: CharacterData, world, kind: Enums.RoomType) -> int:
+	var home: BuildingData = world.get_building(c.home_building_id)
+	if home == null:
+		return -1
+	var room := home.get_apartment_room(c.home_apartment_index, kind)
+	return room.id if room != null else -1
 
 ## Инерция применима только к "свободным" занятиям — не к работе/сну (те уже
 ## решены выше жёстко) и не к самому приёму пищи (есть не "залипает" сам по
@@ -97,10 +110,12 @@ func _score_eat(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 
 	var venue := _pick_open_building(world, [Enums.BuildingType.CAFE])
 	var building_id := c.home_building_id
-	var room_id := c.home_room_id
+	var room_id := _home_room_id(c, world, Enums.RoomType.HOME_KITCHEN)
 	if venue != null:
-		building_id = venue.id
-		room_id = venue.rooms[0].id if venue.rooms.size() > 0 else 0
+		var room := venue.get_room_by_kind(Enums.RoomType.DINING_HALL)
+		if room != null:
+			building_id = venue.id
+			room_id = room.id
 
 	return {
 		"action": Enums.ActionType.EAT,
@@ -120,10 +135,12 @@ func _score_socialize(c: CharacterData, world, w: DecisionWeights) -> Dictionary
 
 	var venue := _pick_open_building(world, [Enums.BuildingType.BAR, Enums.BuildingType.CLUB])
 	var building_id := c.home_building_id
-	var room_id := c.home_room_id
+	var room_id := _home_room_id(c, world, Enums.RoomType.LIVING_ROOM)
 	if venue != null:
-		building_id = venue.id
-		room_id = venue.rooms[0].id if venue.rooms.size() > 0 else 0
+		var room := venue.get_room_by_kind(Enums.RoomType.VENUE_HALL)
+		if room != null:
+			building_id = venue.id
+			room_id = room.id
 
 	return {
 		"action": Enums.ActionType.SOCIALIZE,
@@ -136,12 +153,14 @@ func _score_rest(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 	var score := (100.0 - c.fun) * w.rest_weight + c.stress * 0.3
 
 	var building_id := c.home_building_id
-	var room_id := c.home_room_id
+	var room_id := _home_room_id(c, world, Enums.RoomType.LIVING_ROOM)
 	if randf() < w.park_rest_chance:
 		var park := _pick_open_building(world, [Enums.BuildingType.PARK])
 		if park != null:
-			building_id = park.id
-			room_id = park.rooms[0].id if park.rooms.size() > 0 else 0
+			var room := park.get_room_by_kind(Enums.RoomType.PARK_REST_ZONE)
+			if room != null:
+				building_id = park.id
+				room_id = room.id
 
 	return {
 		"action": Enums.ActionType.REST,
@@ -158,10 +177,12 @@ func _score_wander(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 
 	var park := _pick_open_building(world, [Enums.BuildingType.PARK])
 	var building_id := c.home_building_id
-	var room_id := c.home_room_id
+	var room_id := _home_room_id(c, world, Enums.RoomType.LIVING_ROOM)
 	if park != null:
-		building_id = park.id
-		room_id = park.rooms[0].id if park.rooms.size() > 0 else 0
+		var room := park.get_room_by_kind(Enums.RoomType.PARK_PATH)
+		if room != null:
+			building_id = park.id
+			room_id = room.id
 
 	return {
 		"action": Enums.ActionType.WANDER,
@@ -178,10 +199,12 @@ func _score_shop(c: CharacterData, world, w: DecisionWeights) -> Dictionary:
 
 	var venue := _pick_open_building(world, [Enums.BuildingType.SHOP])
 	var building_id := c.home_building_id
-	var room_id := c.home_room_id
+	var room_id := _home_room_id(c, world, Enums.RoomType.LIVING_ROOM)
 	if venue != null:
-		building_id = venue.id
-		room_id = venue.rooms[0].id if venue.rooms.size() > 0 else 0
+		var room := venue.get_room_by_kind(Enums.RoomType.SHOP_FLOOR)
+		if room != null:
+			building_id = venue.id
+			room_id = room.id
 	else:
 		score -= 1000.0 # "сходить в магазин, оставшись дома" смысла не имеет
 

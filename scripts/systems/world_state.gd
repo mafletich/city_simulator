@@ -8,35 +8,15 @@ const MINUTES_PER_TICK: int = 10
 ## зданий/должностей ниже — если поменяешь состав города, скорее всего
 ## придётся подстроить и это число (см. отчёт о прогонах в PR/чате).
 const CHARACTER_COUNT: int = 50
+## У каждой квартиры в жилом доме — 4 комнаты? Нет: см. RoomLayouts, у каждой
+## квартиры своя спальня/гостиная/кухня (3 комнаты). Это число — сколько
+## квартир в одном жилом доме.
+const APARTMENTS_PER_BUILDING: int = 4
+const MAX_FRIENDS: int = 5
 
 const DAY_NAMES: Array[String] = [
 	"Понедельник", "Вторник", "Среда", "Четверг",
 	"Пятница", "Суббота", "Воскресенье",
-]
-
-const REST_FLAVORS: Array[String] = [
-	"Смотрит телевизор", "Читает книгу", "Слушает музыку", "Просто отдыхает",
-]
-const OFFICE_WORKER_ACTIVITIES: Array[String] = [
-	"Пишет отчёт", "На совещании", "Отвечает на письма", "Звонит клиенту",
-]
-const OFFICE_DIRECTOR_ACTIVITIES: Array[String] = [
-	"Проводит совещание", "Подписывает документы", "На звонке с партнёрами", "Изучает отчёты",
-]
-const DOCTOR_ACTIVITIES: Array[String] = [
-	"Ведёт приём", "Заполняет карты пациентов", "На обходе",
-]
-const CHIEF_DOCTOR_ACTIVITIES: Array[String] = [
-	"Проверяет работу отделения", "Совещание с персоналом", "Изучает отчёты",
-]
-const MANAGER_ACTIVITIES: Array[String] = [
-	"Проверяет отчёты", "Общается с поставщиками", "Следит за залом", "Работает с кассой",
-]
-const COOK_ACTIVITIES: Array[String] = [
-	"Готовит блюдо", "Моет посуду", "Проверяет запасы на кухне",
-]
-const GARDENER_ACTIVITIES: Array[String] = [
-	"Подстригает кусты", "Поливает клумбы", "Убирает территорию", "Сажает цветы",
 ]
 
 var characters: Array[CharacterData] = []
@@ -74,7 +54,7 @@ func generate_city() -> void:
 
 	var residential: Array[BuildingData] = []
 	for i in range(14):
-		var b := _create_building(next_id, "Жилой дом №%d" % (i + 1), Enums.BuildingType.RESIDENTIAL, 4)
+		var b := _create_residential_building(next_id, "Жилой дом №%d" % (i + 1), APARTMENTS_PER_BUILDING)
 		next_id += 1
 		buildings.append(b)
 		residential.append(b)
@@ -97,7 +77,7 @@ func generate_city() -> void:
 
 	var all_vacancies: Array[Dictionary] = []
 	for spec in workplace_specs:
-		var wp := _create_building(next_id, spec["name"], spec["type"], spec["size"])
+		var wp := _create_workplace_building(next_id, spec["name"], spec["type"], spec["size"])
 		next_id += 1
 
 		var preset := BuildingSchedules.pick_random_preset(wp.building_type)
@@ -135,27 +115,43 @@ func generate_city() -> void:
 		var c := _create_random_character(i, residential, job_assignments[i], used_full_names)
 		characters.append(c)
 
+	_assign_friendships()
 	_place_all_characters_at_home()
 
-func _create_building(id: int, building_name: String, type: Enums.BuildingType, size: int) -> BuildingData:
+func _create_residential_building(id: int, building_name: String, apartment_count: int) -> BuildingData:
+	var b := BuildingData.new()
+	b.id = id
+	b.building_name = building_name
+	b.building_type = Enums.BuildingType.RESIDENTIAL
+
+	var rooms: Array[RoomData] = []
+	var room_id := 0
+	for apt in range(apartment_count):
+		for kind in RoomLayouts.get_apartment_room_kinds():
+			var r := RoomData.new()
+			r.id = room_id
+			room_id += 1
+			r.kind = kind
+			r.capacity = 2
+			r.apartment_index = apt
+			rooms.append(r)
+	b.rooms = rooms
+	return b
+
+func _create_workplace_building(id: int, building_name: String, type: Enums.BuildingType, main_capacity: int) -> BuildingData:
 	var b := BuildingData.new()
 	b.id = id
 	b.building_name = building_name
 	b.building_type = type
 
 	var rooms: Array[RoomData] = []
-	if type == Enums.BuildingType.RESIDENTIAL:
-		for i in range(size):
-			var r := RoomData.new()
-			r.id = i
-			r.room_type = "apartment"
-			r.capacity = 2
-			rooms.append(r)
-	else:
+	var room_id := 0
+	for spec in RoomLayouts.get_room_specs(type, main_capacity):
 		var r := RoomData.new()
-		r.id = 0
-		r.room_type = "hall"
-		r.capacity = size
+		r.id = room_id
+		room_id += 1
+		r.kind = spec["kind"]
+		r.capacity = spec["capacity"]
 		rooms.append(r)
 	b.rooms = rooms
 	return b
@@ -206,9 +202,8 @@ func _create_random_character(id: int, residential: Array[BuildingData], vacancy
 	c.stress = randf_range(0.0, 30.0)
 
 	var home: BuildingData = residential[randi() % residential.size()]
-	var apartment: RoomData = home.rooms[randi() % home.rooms.size()]
 	c.home_building_id = home.id
-	c.home_room_id = apartment.id
+	c.home_apartment_index = randi() % APARTMENTS_PER_BUILDING
 
 	return c
 
@@ -223,9 +218,46 @@ func _assign_sleep_hours(c: CharacterData) -> void:
 	c.sleep_end_hour = wake_hour
 	c.sleep_start_hour = (wake_hour - 8 + 24) % 24
 
+## Каждому — от 0 до MAX_FRIENDS друзей. Дружба взаимна по построению: она
+## добавляется на обе стороны одновременно, никогда только на одну. Сосед
+## (тот же дом) или коллега (то же место работы) выбирается с повышенной
+## вероятностью, но не обязательно — если такого нет рядом или не повезло,
+## берём случайного жителя города.
+func _assign_friendships() -> void:
+	for c in characters:
+		var target := randi_range(0, MAX_FRIENDS)
+		var attempts := 0
+		while c.friend_ids.size() < target and attempts < 30:
+			attempts += 1
+			var candidate := _pick_friend_candidate(c)
+			if candidate == null or candidate.id == c.id:
+				continue
+			if c.friend_ids.has(candidate.id):
+				continue
+			if c.friend_ids.size() >= MAX_FRIENDS or candidate.friend_ids.size() >= MAX_FRIENDS:
+				continue
+			c.friend_ids.append(candidate.id)
+			candidate.friend_ids.append(c.id)
+
+func _pick_friend_candidate(c: CharacterData) -> CharacterData:
+	if randf() < 0.6:
+		var pool: Array[CharacterData] = []
+		for other in characters:
+			if other.id == c.id:
+				continue
+			if other.home_building_id == c.home_building_id:
+				pool.append(other)
+			elif c.work_building_id != -1 and other.work_building_id == c.work_building_id:
+				pool.append(other)
+		if not pool.is_empty():
+			return pool[randi() % pool.size()]
+	return characters[randi() % characters.size()]
+
 func _place_all_characters_at_home() -> void:
 	for c in characters:
-		_move_character(c, c.home_building_id, c.home_room_id)
+		var home := get_building(c.home_building_id)
+		var bedroom := home.get_apartment_room(c.home_apartment_index, Enums.RoomType.BEDROOM) if home != null else null
+		_move_character(c, c.home_building_id, bedroom.id if bedroom != null else -1)
 		c.current_action = Enums.ActionType.SLEEP
 
 ## --- Продвижение времени ------------------------------------------------
@@ -275,20 +307,28 @@ func _apply_decision(c: CharacterData, decision: Dictionary) -> void:
 		_move_character(c, target_building_id, target_room_id)
 
 	c.current_action = action
+	var target_building := get_building(target_building_id)
+	var target_room := target_building.get_room(target_room_id) if target_building != null else null
+	var room_kind: Enums.RoomType = target_room.kind if target_room != null else Enums.RoomType.LIVING_ROOM
 
 	match action:
 		Enums.ActionType.SLEEP:
 			c.current_activity_detail = ""
 			c.energy = clamp(c.energy + weights.sleep_energy_regen, 0.0, 100.0)
 		Enums.ActionType.EAT:
-			c.current_activity_detail = ""
-			var target_building := get_building(target_building_id)
-			if target_building != null and target_building.building_type == Enums.BuildingType.CAFE:
-				c.hunger = clamp(c.hunger - weights.cafe_hunger_relief, 0.0, 100.0)
-			else:
+			var at_home := room_kind == Enums.RoomType.HOME_KITCHEN
+			var options := ActivityCatalog.eat_home_options() if at_home else ActivityCatalog.eat_cafe_options()
+			c.current_activity_detail = options[randi() % options.size()]["flavor"]
+			if at_home:
 				c.hunger = clamp(c.hunger - weights.eat_hunger_relief, 0.0, 100.0)
+			else:
+				c.hunger = clamp(c.hunger - weights.cafe_hunger_relief, 0.0, 100.0)
 		Enums.ActionType.SOCIALIZE:
-			c.current_activity_detail = ""
+			if room_kind == Enums.RoomType.VENUE_HALL:
+				var options := ActivityCatalog.socialize_options()
+				c.current_activity_detail = options[randi() % options.size()]["flavor"]
+			else:
+				c.current_activity_detail = "Созванивается с друзьями"
 			c.social = clamp(c.social + weights.socialize_social_gain, 0.0, 100.0)
 			c.fun = clamp(c.fun + weights.socialize_fun_gain, 0.0, 100.0)
 		Enums.ActionType.WORK:
@@ -296,20 +336,30 @@ func _apply_decision(c: CharacterData, decision: Dictionary) -> void:
 			# _resolve_work_activities — там виден весь коллектив здания разом.
 			c.stress = clamp(c.stress + weights.work_stress_gain, 0.0, 100.0)
 		Enums.ActionType.REST:
-			c.current_activity_detail = REST_FLAVORS[randi() % REST_FLAVORS.size()]
+			var at_home := room_kind == Enums.RoomType.LIVING_ROOM
+			var options := ActivityCatalog.rest_options(at_home)
+			c.current_activity_detail = options[randi() % options.size()]["flavor"]
 			c.fun = clamp(c.fun + weights.rest_fun_gain, 0.0, 100.0)
 			c.stress = clamp(c.stress - weights.rest_stress_relief, 0.0, 100.0)
 		Enums.ActionType.WANDER:
-			c.current_activity_detail = ""
+			if room_kind == Enums.RoomType.PARK_PATH:
+				var options := ActivityCatalog.wander_options()
+				c.current_activity_detail = options[randi() % options.size()]["flavor"]
+			else:
+				c.current_activity_detail = ""
 			c.fun = clamp(c.fun + weights.wander_fun_gain, 0.0, 100.0)
 		Enums.ActionType.SHOP:
-			c.current_activity_detail = ""
+			if room_kind == Enums.RoomType.SHOP_FLOOR:
+				var options := ActivityCatalog.shop_options()
+				c.current_activity_detail = options[randi() % options.size()]["flavor"]
+			else:
+				c.current_activity_detail = ""
 			c.fun = clamp(c.fun + weights.shop_fun_gain, 0.0, 100.0)
 
-## Второй проход: конкретизируем, ЧЕМ именно занят каждый работающий персонаж,
-## с учётом того, кто ещё есть в этом же здании (клиенты, другие работники).
-## Группируем по ДОЛЖНОСТИ, а не по типу здания — у одного здания (кафе)
-## бывает сразу несколько разных должностей одновременно.
+## Второй проход: конкретизируем, ЧЕМ именно занят каждый работающий персонаж
+## И В КАКОЙ ИМЕННО КОМНАТЕ — с учётом того, кто ещё есть в этом же здании
+## (клиенты, другие работники). Группируем по ДОЛЖНОСТИ, а не по типу
+## здания — у одного здания (кафе) бывает сразу несколько разных должностей.
 func _resolve_work_activities() -> void:
 	var workers_by_building: Dictionary = {}
 	for c in characters:
@@ -349,26 +399,24 @@ func _resolve_work_activities() -> void:
 					_resolve_waiter_activities(building, pos_workers)
 				Enums.Profession.SHOPKEEPER:
 					_resolve_shopkeeper_activities(building, pos_workers)
-				Enums.Profession.COOK:
-					_assign_flavor(pos_workers, COOK_ACTIVITIES)
-				Enums.Profession.OFFICE_WORKER:
-					_assign_flavor(pos_workers, OFFICE_WORKER_ACTIVITIES)
-				Enums.Profession.OFFICE_DIRECTOR:
-					_assign_flavor(pos_workers, OFFICE_DIRECTOR_ACTIVITIES)
-				Enums.Profession.DOCTOR:
-					_assign_flavor(pos_workers, DOCTOR_ACTIVITIES)
-				Enums.Profession.CHIEF_DOCTOR:
-					_assign_flavor(pos_workers, CHIEF_DOCTOR_ACTIVITIES)
-				Enums.Profession.BAR_MANAGER, Enums.Profession.SHOP_MANAGER, Enums.Profession.CAFE_MANAGER:
-					_assign_flavor(pos_workers, MANAGER_ACTIVITIES)
-				Enums.Profession.GARDENER:
-					_assign_flavor(pos_workers, GARDENER_ACTIVITIES)
 				_:
-					_assign_flavor(pos_workers, ["Работает"])
+					_resolve_catalog_activities(building, pos_workers, position)
 
-func _assign_flavor(workers: Array, flavors: Array[String]) -> void:
+## Профессии без завязки на конкретных клиентов — берём готовую пару
+## "фраза+комната" из ActivityCatalog и физически переставляем работника
+## в эту комнату (не только текст меняется, но и реальное местоположение).
+func _resolve_catalog_activities(building: BuildingData, workers: Array, profession: Enums.Profession) -> void:
+	var options := ActivityCatalog.work_options(profession)
 	for w in workers:
-		w.current_activity_detail = flavors[randi() % flavors.size()]
+		var choice: Dictionary = options[randi() % options.size()]
+		_move_worker(w, building, building.get_room_by_kind(choice["room"]))
+		w.current_activity_detail = choice["flavor"]
+
+func _move_worker(c: CharacterData, building: BuildingData, room: RoomData) -> void:
+	if room == null:
+		return
+	if c.current_building_id != building.id or c.current_room_id != room.id:
+		_move_character(c, building.id, room.id)
 
 func _get_clients_in_building(building_id: int, wanted_action: Enums.ActionType) -> Array:
 	var result: Array = []
@@ -380,9 +428,11 @@ func _get_clients_in_building(building_id: int, wanted_action: Enums.ActionType)
 ## Клиентов, ищущих обслуживания, распределяем 1-в-1 между сотрудниками этого
 ## тика, чтобы двое барменов/официантов не обслуживали одного и того же гостя.
 func _resolve_bartender_activities(building: BuildingData, workers: Array) -> void:
+	var room := building.get_room_by_kind(Enums.RoomType.BAR_COUNTER)
 	var clients := _get_clients_in_building(building.id, Enums.ActionType.SOCIALIZE)
 	var served_client_ids: Array[int] = []
 	for bartender in workers:
+		_move_worker(bartender, building, room)
 		var available: Array = []
 		for cl in clients:
 			if not served_client_ids.has(cl.id):
@@ -395,9 +445,11 @@ func _resolve_bartender_activities(building: BuildingData, workers: Array) -> vo
 			bartender.current_activity_detail = "Протирает барную стойку"
 
 func _resolve_waiter_activities(building: BuildingData, workers: Array) -> void:
+	var room := building.get_room_by_kind(Enums.RoomType.DINING_HALL)
 	var clients := _get_clients_in_building(building.id, Enums.ActionType.EAT)
 	var served_client_ids: Array[int] = []
 	for waiter in workers:
+		_move_worker(waiter, building, room)
 		var available: Array = []
 		for cl in clients:
 			if not served_client_ids.has(cl.id):
@@ -410,11 +462,15 @@ func _resolve_waiter_activities(building: BuildingData, workers: Array) -> void:
 			waiter.current_activity_detail = "Убирает со стола"
 
 func _resolve_shopkeeper_activities(building: BuildingData, workers: Array) -> void:
+	var floor_room := building.get_room_by_kind(Enums.RoomType.SHOP_FLOOR)
+	var stock_room := building.get_room_by_kind(Enums.RoomType.STOCKROOM)
 	var clients := _get_clients_in_building(building.id, Enums.ActionType.SHOP)
 	for shopkeeper in workers:
 		if clients.size() > 0 and randf() < 0.8:
+			_move_worker(shopkeeper, building, floor_room)
 			shopkeeper.current_activity_detail = "Обслуживает покупателя"
 		else:
+			_move_worker(shopkeeper, building, stock_room)
 			shopkeeper.current_activity_detail = "Раскладывает товар на полках"
 
 ## --- Вспомогательные методы ---------------------------------------------
@@ -448,6 +504,12 @@ func get_buildings_by_type(type: Enums.BuildingType) -> Array[BuildingData]:
 		if b.building_type == type:
 			result.append(b)
 	return result
+
+func get_character(id: int) -> CharacterData:
+	for c in characters:
+		if c.id == id:
+			return c
+	return null
 
 func get_characters_in_building(building_id: int) -> Array[CharacterData]:
 	var result: Array[CharacterData] = []

@@ -11,9 +11,15 @@ extends Resource
 @export var fingerprint: String = ""
 
 @export var home_building_id: int = -1
-@export var home_room_id: int = -1
+## Индекс СВОЕЙ квартиры в доме (у каждой квартиры своя спальня/гостиная/
+## кухня — см. RoomLayouts.get_apartment_room_kinds).
+@export var home_apartment_index: int = -1
 @export var work_building_id: int = -1
 @export var work_room_id: int = -1
+
+## Друзья — просто характеристика (пока не влияет на решения). Дружба
+## взаимна по построению: см. World._assign_friendships.
+@export var friend_ids: Array[int] = []
 
 ## Примерное расписание. -1 у work_start_hour значит "не работает".
 @export var work_start_hour: int = -1

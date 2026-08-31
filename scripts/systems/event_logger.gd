@@ -43,7 +43,8 @@ func _append_entry(c: CharacterData, co_present: Array, world, time_str: String)
 		return
 
 	var building: BuildingData = world.get_building(c.current_building_id)
-	var location := _location_label(building, c.current_room_id)
+	var room: RoomData = building.get_room(c.current_room_id) if building != null else null
+	var location := _location_label(building, room)
 
 	file.store_line("[%s] Место: %s" % [time_str, location])
 	file.store_line("  " + _format_person_line(c, "Я"))
@@ -72,12 +73,13 @@ func _format_person_line(c: CharacterData, prefix: String) -> String:
 		int(c.energy), int(c.hunger), int(c.social), int(c.fun), int(c.stress),
 	]
 
-func _location_label(building: BuildingData, room_id: int) -> String:
+func _location_label(building: BuildingData, room: RoomData) -> String:
 	if building == null:
 		return "неизвестно"
-	if building.building_type == Enums.BuildingType.RESIDENTIAL:
-		return "%s, квартира %d" % [building.building_name, room_id + 1]
-	return building.building_name
+	var room_label := Enums.room_type_text(room.kind) if room != null else "?"
+	if building.building_type == Enums.BuildingType.RESIDENTIAL and room != null:
+		return "%s, квартира %d — %s" % [building.building_name, room.apartment_index + 1, room_label]
+	return "%s — %s" % [building.building_name, room_label]
 
 func _file_name_for(c: CharacterData) -> String:
 	return "%s_%s.log" % [c.first_name, c.last_name]
